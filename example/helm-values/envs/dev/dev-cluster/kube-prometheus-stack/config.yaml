@@ -1,0 +1,11 @@
+auto: true
+locked: false
+namespace: monitoring
+timeout: 180
+release: kube-prometheus-stack
+release_chart:
+  type: helm
+  repo_url: https://prometheus-community.github.io/helm-charts
+  chart_name: kube-prometheus-stack
+  chart_version: 35.5.1
+depends: []
