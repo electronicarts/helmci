@@ -1,3 +1,13 @@
 {
-    "editor.formatOnSave": true
+    "editor.formatOnSave": true,
+    "cSpell.words": [
+        "brianmay",
+        "Buildx",
+        "Clippy",
+        "COLOR",
+        "Dwarnings",
+        "electronicarts",
+        "refs",
+        "Swatinem"
+    ]
 }
