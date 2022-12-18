@@ -264,7 +264,7 @@ fn get_args_from_chart(chart: &HelmChart) -> Result<(String, Vec<String>)> {
             repo,
             chart_name,
             chart_version,
-        } => (format!("{}/{}", repo.name, chart_name), Some(chart_version)),
+        } => (format!("{}/{chart_name}", repo.name), Some(chart_version)),
         HelmChart::OciRepo {
             repo_url,
             chart_name,
@@ -444,7 +444,7 @@ async fn outdated_helm_chart(
         "search".to_string(),
         "repo".to_string(),
         "-o=json".to_string(),
-        format!("{}/{}", repo.name, chart_name),
+        format!("{}/{chart_name}", repo.name),
     ];
 
     let command_line = CommandLine("helm".to_string(), args);
@@ -514,7 +514,7 @@ async fn outdated_oci_chart(
         "describe-images".to_string(),
         "--region=us-east-2".to_string(),
         "--repository-name".to_string(),
-        format!("{}/{}", url.path().trim_start_matches('/'), chart_name),
+        format!("{}/{chart_name}", url.path().trim_start_matches('/')),
     ];
 
     let command_line = CommandLine("aws".to_string(), args);

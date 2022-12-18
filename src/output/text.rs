@@ -304,8 +304,8 @@ impl SlackState {
                 };
                 let cluster = installation.cluster_name.clone();
                 let string = format!(
-                    "{status} {} was {verb} {version} on {} namespace {}",
-                    installation.name, cluster, installation.namespace
+                    "{status} {} was {verb} {version} on {cluster} namespace {}",
+                    installation.name, installation.namespace
                 );
                 let markdown = SlackBlockMarkDownText::new(string);
                 let block = SlackSectionBlock::new().with_text(markdown.into());
@@ -393,11 +393,11 @@ async fn update_results(state: &State, slack_state: &mut Option<SlackState>, fin
 
     if finished {
         let results = results_to_string(state);
-        print!("\n\n{}", results);
+        print!("\n\n{results}");
 
         if !state.versions.is_empty() {
             let versions = versions_to_string(state);
-            print!("\n\n{}", versions);
+            print!("\n\n{versions}");
         }
     };
 }
@@ -437,15 +437,15 @@ fn process_message(msg: Message, state: &mut State) {
             let result_str = hr.result_line();
 
             let s = GitlabSection {
-                name: format!("{}_{:?}", installation.name, command),
-                title: format!("{} {} {}", installation.name, command, result_str),
+                name: format!("{}_{command:?}", installation.name),
+                title: format!("{} {command} {result_str}", installation.name),
                 duration: hr.duration(),
             };
             s.start();
             println!("------------------------------------------");
             match result {
-                Ok(success) => print!("{}", success),
-                Err(err) => print!("{}", err),
+                Ok(success) => print!("{success}"),
+                Err(err) => print!("{err}"),
             }
             s.stop();
         }

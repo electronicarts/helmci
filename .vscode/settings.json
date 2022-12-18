@@ -5,6 +5,7 @@
         "Buildx",
         "Clippy",
         "COLOR",
+        "crossterm",
         "Dwarnings",
         "electronicarts",
         "refs",

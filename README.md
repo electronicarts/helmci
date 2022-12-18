@@ -53,7 +53,6 @@ locked: false
 * `context` is the `--kube-context` parameter passed to helm.
 * Setting `locked` to true disables all releases under the cluster dir.
 
-
 ## Release config
 
 For example `example/helm-values/envs/dev/dev-cluster/kube-prometheus-stack/config.yaml`:
@@ -93,7 +92,6 @@ releases:
 ```
 
 ## Helm chart config
-
 
 Example helm chart specification:
 
@@ -139,7 +137,7 @@ Unfortuanately, these all had limitations.
 * spinnaker seems rather heavy weight to install, haven't succeeded yet.
 * harness is mostly proprietary solution.
 
-As a result a Python program was written as an altnerative solution. This is a rewrite of the Python program.
+As a result a Python program was written as an alternative solution. This is a rewrite of the Python program.
 
 ## Current Limitations
 

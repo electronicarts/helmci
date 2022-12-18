@@ -690,8 +690,8 @@ fn process_message(msg: Message, state: &mut State) {
         Message::InstallationVersion(i, our_version, upstream_version) => {
             if our_version != upstream_version {
                 let str = format!(
-                    "Installation {} our version {} upstream version {}",
-                    i.name, our_version, upstream_version
+                    "Installation {} our version {our_version} upstream version {upstream_version}",
+                    i.name
                 );
                 state.logs.add_log(log(tracing::Level::INFO, &str));
             }

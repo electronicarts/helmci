@@ -206,7 +206,7 @@ impl Display for CommandLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)?;
         for arg in &self.1 {
-            write!(f, " {}", arg)?;
+            write!(f, " {arg}")?;
         }
         Ok(())
     }
@@ -216,7 +216,7 @@ impl std::fmt::Debug for CommandLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "CommandLine(\"{}", self.0)?;
         for arg in &self.1 {
-            write!(f, " {}", arg)?;
+            write!(f, " {arg}")?;
         }
         write!(f, "\")")?;
         Ok(())
