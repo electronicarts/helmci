@@ -1,4 +1,4 @@
-FROM docker.io/library/rust:1.65-alpine3.15 as builder
+FROM docker.io/library/rust:1.66-alpine3.15 as builder
 
 RUN apk update && apk add \
     gcc \
