@@ -16,6 +16,19 @@ helm plugin install https://github.com/databus23/helm-diff
 
 Edit kubectl context in `example/helm-values/envs/dev/dev-cluster/config.yaml`.
 
+There are two output methods. Add `--output text` (gitlab flavoured text + optional slack) or `--output tui` full screen text mode to the following commands. By default `text` is used.
+
+The `tui` full screen text mode has the following keyboard bindings:
+
+* `q`: Request exit when all processes finished. This won't kill processes currently running.
+* `ctrl-c`: Same as above.
+* `l`: List installations.
+* `ESC`: From installations, toggle stop requested. From commands, go to installations.
+* `up`/`down`: select next/previous item.
+* `enter`: From installations, show commands for the selected item.
+* `pg up`/`pg down`: Scroll the details pane up/down.
+* `left`/`right` scroll the details pane left/right.
+
 Run commands such as:
 
 ```sh
@@ -32,6 +45,14 @@ Only do this if you really want to deploy:
 cargo run -- --vdir ./example/helm-values upgrade
 ```
 
+## Config layout
+
+You can have zero or more environments.
+
+An environment can have zero or more clusters.
+
+A cluster can have zero or more releases, which corresponds to a helm release that gets installed.
+
 ## Environment config
 
 ```yaml
@@ -41,17 +62,21 @@ locked: false
 
 * Setting `locked` to true disables all releases under the env.
 
+The name of the directory corresponds to the name of the environment. In the above case it will be called `dev`.
+
 ## Cluster config
 
 For example `example/helm-values/envs/dev/dev-cluster/config.yaml`:
 
 ```yaml
-context: dev-cluster
+context: 1234-dev-cluster
 locked: false
 ```
 
 * `context` is the `--kube-context` parameter passed to helm.
 * Setting `locked` to true disables all releases under the cluster dir.
+
+The name of the directory corresponds to the name of the cluster. Which can be different from the context value provided. In the above example, the cluster is called `dev-cluster` and uses the parameter `--kube-context 1234-dev-cluster`.
 
 ## Release config
 
@@ -73,10 +98,12 @@ depends: []
 
 * Setting `auto` to false disables deploys unless using `--auto=all` parameter.
 * Setting `locked` to false disables all deploys.
-* `namespace` is the kubenetes namespace to use for deploys.
+* `namespace` is the kubernetes namespace to use for deploys.
 * `release` is the release name for the helm chart.
 * `depends` is a list of releases that must be installed first. `$namespace/$release` format.
 * `release_chart` is how to find the chart to install (see below).
+
+Note: the value of the `release` is used as the release name, not the name of the directory.
 
 The `values.yaml` and (optionally) `values.secrets` files contain the helm values. Note `values.secrets` can be encrypted, but if so must be decrypted using whatever mechanism before running helmci.
 
@@ -141,6 +168,9 @@ As a result a Python program was written as an alternative solution. This is a r
 
 ## Current Limitations
 
-* Running helmci upgrade on chart that has not changed results in an upgrade regardless. Which depending on the chart could be slow.
+* Running helmci upgrade on chart that has not changed results in an upgrade regardless. Which depending on the chart could be slow, and adds useless helm metadata to Kubernetes. Ideally need some way to skip charts if nothing has really changed.
 * Should integrate better with secrets mechanisms that do not store plain text version in working directory, such as sops.
-* Should be able to save hash of chart to ensure it is unexpectedly changed upstream.
+* Should be able to save hash of chart to ensure it is not unexpectedly changed upstream.
+* `text` output method probably should split out slack support somehow into its own output module.
+* No idea how well `text` will work with github, only tested with gitlab.
+* `tui` output  has a quirk in that it will wait to exit if stuff is still running, and then require pushing enter in order to exit properly. This is as a result of how I run the sync event code from async code (it is still running when we try to exit).

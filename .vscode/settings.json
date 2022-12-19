@@ -1,6 +1,7 @@
 {
     "editor.formatOnSave": true,
     "cSpell.words": [
+        "argocd",
         "brianmay",
         "Buildx",
         "Clippy",
@@ -8,7 +9,10 @@
         "crossterm",
         "Dwarnings",
         "electronicarts",
+        "helmci",
         "refs",
-        "Swatinem"
+        "sqlpad",
+        "Swatinem",
+        "vdir"
     ]
 }
