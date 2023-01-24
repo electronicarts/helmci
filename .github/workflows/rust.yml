@@ -44,7 +44,7 @@ jobs:
           release-type: rust
           draft: true
 
-github_build:
+  github_build:
     name: Build release binaries
     needs: release_please
     if: ${{ needs.release_please.outputs.release_created == 'true' }}
