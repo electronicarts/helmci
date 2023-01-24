@@ -12,11 +12,15 @@ env:
 
 jobs:
   release_please:
-    if: github.repository == 'electronicarts/helmci'
-
+    name: Release Please
     runs-on: ubuntu-latest
+    if: github.repository == 'electronicarts/helmci'
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: google-github-actions/release-please-action@v3
+        id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           release-type: rust
