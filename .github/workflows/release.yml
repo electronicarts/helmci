@@ -3,8 +3,6 @@ name: Rust
 on:
   push:
     branches: ["main"]
-  pull_request:
-    branches: ["main"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -13,28 +11,8 @@ env:
   MACOSX_DEPLOYMENT_TARGET: 10.7
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Fmt Check
-        run: cargo fmt -- --check
-      - name: Clippy
-        run: cargo clippy --no-deps -- -Dwarnings
-      - name: Compile
-        run: cargo build
-      - name: Test
-        run: cargo test
-
   release_please:
     if: github.repository == 'electronicarts/helmci'
-    needs:
-      - test
 
     runs-on: ubuntu-latest
     steps:
