@@ -9,15 +9,16 @@ use anyhow::Result;
 use async_trait::async_trait;
 use crossterm::event::DisableMouseCapture;
 use crossterm::event::Event;
+use crossterm::event::EventStream;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyModifiers;
 use crossterm::execute;
 use crossterm::terminal::disable_raw_mode;
 use crossterm::terminal::EnterAlternateScreen;
 use crossterm::terminal::LeaveAlternateScreen;
+use futures::StreamExt;
 use tokio::select;
 use tokio::sync::mpsc;
-use tokio::task::spawn_blocking;
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 use tui::backend::Backend;
@@ -543,6 +544,7 @@ struct State {
     finished_duration: Option<Duration>,
     stop_requested: bool,
     has_errors: bool,
+    reader: EventStream,
 }
 
 impl State {
@@ -561,6 +563,7 @@ impl State {
             finished_duration: None,
             stop_requested: false,
             has_errors: false,
+            reader: EventStream::new(),
         }
     }
 
@@ -629,18 +632,13 @@ async fn process_events(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     mut state: State,
 ) -> Result<()> {
-    let mut operation = spawn_blocking(crossterm::event::read);
-
     loop {
         select! {
             Some(msg) = rx.recv() => {
                 process_message(msg, &mut state);
             }
-            Ok(Ok(event)) = &mut operation => {
+            Some(Ok(event)) = state.reader.next() => {
                 process_event(&event, &mut state);
-                if !state.stop_requested || !state.finished {
-                    operation = spawn_blocking(crossterm::event::read);
-                }
             }
             else => {
                 // This shouldn't happen, but if it does, just exit.

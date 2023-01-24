@@ -173,4 +173,3 @@ As a result a Python program was written as an alternative solution. This is a r
 * Should be able to save hash of chart to ensure it is not unexpectedly changed upstream.
 * `text` output method probably should split out slack support somehow into its own output module.
 * No idea how well `text` will work with github, only tested with gitlab.
-* `tui` output  has a quirk in that it will wait to exit if stuff is still running, and then require pushing enter in order to exit properly. This is as a result of how I run the sync event code from async code (it is still running when we try to exit).
