@@ -157,7 +157,7 @@ There are a number of existing solutions of deploying stuff on a kubernetes clus
 * [spinnaker](https://spinnaker.io/)
 * [harness](https://docs.harness.io/)
 
-Unfortuanately, these all had limitations.
+Unfortuanately, these all had limitations:
 
 * argocd, while it supports helm charts, it does not support saving helm values in git.
 * Can overcome this issue by creating git repo of charts containing helm sub-charts, but this is ugly and requires modifying the helm values.
