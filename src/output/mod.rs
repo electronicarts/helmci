@@ -14,11 +14,12 @@ use crate::{
     Task,
 };
 
+pub mod slack;
 pub mod text;
 pub mod tui;
 
 /// A message to the output module.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Message {
     /// An job is to be skipped.
     Skippedjob(Installation),
@@ -31,7 +32,7 @@ pub enum Message {
     /// Notification that we started a job.
     StartedJob(Installation, Instant),
     /// Notification that we finished a job.
-    FinishedJob(Installation, anyhow::Result<()>, Duration),
+    FinishedJob(Installation, Result<(), String>, Duration),
 
     /// A Log entry was logged.
     Log(LogEntry),
@@ -39,7 +40,35 @@ pub enum Message {
     /// This gets sent at very start.
     Start(Task, Instant),
     /// This gets sent when all jobs declared finished, but UI should wait for socket to close before ending.
-    FinishedAll(anyhow::Result<()>, Duration),
+    FinishedAll(Result<(), String>, Duration),
+}
+
+#[derive(Clone)]
+pub struct MultiOutput {
+    tx: Vec<Sender>,
+}
+
+impl MultiOutput {
+    pub fn new(tx: Vec<Sender>) -> Self {
+        Self { tx }
+    }
+
+    pub async fn send(&self, msg: Message) {
+        for tx in &self.tx {
+            tx.send(msg.clone()).await.unwrap_or_else(|err| {
+                print!("Cannot send message to output pipe: {err}");
+            });
+        }
+    }
+
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn try_send(&self, msg: Message) {
+        for tx in &self.tx {
+            tx.try_send(msg.clone()).unwrap_or_else(|err| {
+                print!("Cannot send message to output pipe: {err}");
+            });
+        }
+    }
 }
 
 pub type Sender = mpsc::Sender<Message>;
@@ -47,9 +76,6 @@ pub type Sender = mpsc::Sender<Message>;
 /// Every output module should implement this trait.
 #[async_trait]
 pub trait Output {
-    /// Start the output and get a pipe to send data to.
-    fn get_tx(&mut self) -> Option<Sender>;
-
     /// Wait for output to finish.
     async fn wait(&mut self) -> Result<()>;
 }

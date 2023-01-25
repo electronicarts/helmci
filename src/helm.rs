@@ -17,7 +17,7 @@ use url::Url;
 use crate::{
     command::{CommandLine, CommandResult, CommandSuccess},
     config::{AnnouncePolicy, ReleaseReference},
-    output::{Message, Sender},
+    output::{Message, MultiOutput},
     utils::path_to_string,
 };
 
@@ -99,7 +99,7 @@ impl Display for Command {
 }
 
 /// The results of running an installation command.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct HelmResult {
     pub installation: Installation,
     pub result: CommandResult,
@@ -212,7 +212,7 @@ pub async fn remove_repo(
 }
 
 /// Run the lint command.
-pub async fn lint(installation: &Installation, tx: &Sender) -> Result<()> {
+pub async fn lint(installation: &Installation, tx: &MultiOutput) -> Result<()> {
     if let HelmChart::Dir(dir) = &installation.chart {
         let mut args = vec![
             "lint".to_string(),
@@ -234,7 +234,7 @@ pub async fn lint(installation: &Installation, tx: &Sender) -> Result<()> {
         let result = command_line.run().await;
         let has_errors = result.is_err();
         let i_result = HelmResult::from_result(installation, result, Command::Lint);
-        tx.send(Message::InstallationResult(i_result)).await?;
+        tx.send(Message::InstallationResult(i_result)).await;
 
         if has_errors {
             Err(anyhow::anyhow!("lint operation failed"))
@@ -282,7 +282,7 @@ fn get_args_from_chart(chart: &HelmChart) -> Result<(String, Vec<String>)> {
 }
 
 /// Run the helm template command.
-pub async fn template(installation: &Installation, tx: &Sender) -> Result<()> {
+pub async fn template(installation: &Installation, tx: &MultiOutput) -> Result<()> {
     let (chart, mut chart_args) = get_args_from_chart(&installation.chart)?;
 
     let mut args = vec![
@@ -308,7 +308,7 @@ pub async fn template(installation: &Installation, tx: &Sender) -> Result<()> {
     let result = command_line.run().await;
     let has_errors = result.is_err();
     let i_result = HelmResult::from_result(installation, result, Command::Template);
-    tx.send(Message::InstallationResult(i_result)).await?;
+    tx.send(Message::InstallationResult(i_result)).await;
 
     if has_errors {
         Err(anyhow::anyhow!("template operation failed"))
@@ -318,7 +318,7 @@ pub async fn template(installation: &Installation, tx: &Sender) -> Result<()> {
 }
 
 /// Run the helm diff command.
-pub async fn diff(installation: &Installation, tx: &Sender) -> Result<()> {
+pub async fn diff(installation: &Installation, tx: &MultiOutput) -> Result<()> {
     let (chart, mut chart_args) = get_args_from_chart(&installation.chart)?;
 
     let mut args = vec![
@@ -347,7 +347,7 @@ pub async fn diff(installation: &Installation, tx: &Sender) -> Result<()> {
     let result = command_line.run().await;
     let has_errors = result.is_err();
     let i_result = HelmResult::from_result(installation, result, Command::Diff);
-    tx.send(Message::InstallationResult(i_result)).await?;
+    tx.send(Message::InstallationResult(i_result)).await;
 
     if has_errors {
         Err(anyhow::anyhow!("diff operation failed"))
@@ -357,7 +357,7 @@ pub async fn diff(installation: &Installation, tx: &Sender) -> Result<()> {
 }
 
 /// Run the helm upgrade command.
-pub async fn upgrade(installation: &Installation, tx: &Sender, dry_run: bool) -> Result<()> {
+pub async fn upgrade(installation: &Installation, tx: &MultiOutput, dry_run: bool) -> Result<()> {
     let (chart, mut chart_args) = get_args_from_chart(&installation.chart)?;
 
     let mut args = vec![
@@ -395,7 +395,7 @@ pub async fn upgrade(installation: &Installation, tx: &Sender, dry_run: bool) ->
         Command::Upgrade
     };
     let i_result = HelmResult::from_result(installation, result, command);
-    tx.send(Message::InstallationResult(i_result)).await?;
+    tx.send(Message::InstallationResult(i_result)).await;
 
     if has_errors {
         Err(anyhow::anyhow!("upgrade operation failed"))
@@ -405,7 +405,7 @@ pub async fn upgrade(installation: &Installation, tx: &Sender, dry_run: bool) ->
 }
 
 /// Run the helm outdated command.
-pub async fn outdated(installation: &Installation, tx: &Sender) -> Result<()> {
+pub async fn outdated(installation: &Installation, tx: &MultiOutput) -> Result<()> {
     match &installation.chart {
         HelmChart::Dir(_) => {}
         HelmChart::HelmRepo {
@@ -438,7 +438,7 @@ async fn outdated_helm_chart(
     repo: &HelmRepo,
     chart_name: &str,
     chart_version: &str,
-    tx: &Sender,
+    tx: &MultiOutput,
 ) -> Result<()> {
     let args = vec![
         "search".to_string(),
@@ -458,11 +458,11 @@ async fn outdated_helm_chart(
             chart_version.to_owned(),
             version[0].version.clone(),
         ))
-        .await?;
+        .await;
     };
 
     let i_result = HelmResult::from_result(installation, result, Command::Outdated);
-    tx.send(Message::InstallationResult(i_result)).await?;
+    tx.send(Message::InstallationResult(i_result)).await;
 
     if has_errors {
         Err(anyhow::anyhow!("outdated operation failed"))
@@ -499,7 +499,7 @@ async fn outdated_oci_chart(
     repo_url: &str,
     chart_name: &str,
     chart_version: &str,
-    tx: &Sender,
+    tx: &MultiOutput,
 ) -> Result<()> {
     if chart_version.starts_with("0.0.0+") {
         // Hack to skip charts that have git hash versions.
@@ -529,12 +529,12 @@ async fn outdated_oci_chart(
                 chart_version.to_owned(),
                 version,
             ))
-            .await?;
+            .await;
         }
     };
 
     let i_result = HelmResult::from_result(installation, result, Command::Outdated);
-    tx.send(Message::InstallationResult(i_result)).await?;
+    tx.send(Message::InstallationResult(i_result)).await;
 
     if has_errors {
         Err(anyhow::anyhow!("outdated operation failed"))

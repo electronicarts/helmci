@@ -40,7 +40,7 @@ mod depends;
 use depends::{is_depends_ok, HashIndex, InstallationSet};
 
 mod output;
-use output::{Message, Output, Sender};
+use output::{Message, MultiOutput, Output, Sender};
 
 mod config;
 use config::Overrides;
@@ -110,7 +110,7 @@ async fn helm_remove_repos_for_jobs(repos: &[HelmRepo]) -> Result<()> {
     Ok(())
 }
 
-async fn run_job(task: Task, installation: &Installation, tx: &Sender) -> Result<()> {
+async fn run_job(task: Task, installation: &Installation, tx: &MultiOutput) -> Result<()> {
     match task {
         Task::Upgrade => {
             helm::upgrade(installation, tx, true).await?;
@@ -127,12 +127,14 @@ async fn run_job(task: Task, installation: &Installation, tx: &Sender) -> Result
     }
 }
 
-#[derive(Clone, clap::ValueEnum, Debug)]
+#[derive(Copy, Clone, clap::ValueEnum, Debug, Eq, PartialEq)]
 enum OutputFormat {
     /// Use gitlab compliant text + slack output.
     Text,
     /// Use full screen TUI interface.
     Tui,
+    /// Use slack output.
+    Slack,
 }
 
 #[derive(Clone, clap::ValueEnum, Debug)]
@@ -166,8 +168,8 @@ struct Args {
     overrides: Option<String>,
 
     /// What method should be use to display output?
-    #[clap(long, value_enum, default_value_t=OutputFormat::Text)]
-    output: OutputFormat,
+    #[clap(long, value_enum)]
+    output: Vec<OutputFormat>,
 
     /// Should we process releases that have auto set to false?
     #[clap(long, value_enum, default_value_t=AutoState::Yes)]
@@ -207,6 +209,24 @@ enum Commands {
     },
 }
 
+fn get_output(output_format: OutputFormat) -> Result<(Box<dyn Output>, Sender)> {
+    let output: (Box<dyn Output>, Sender) = match output_format {
+        OutputFormat::Text => {
+            let (a, b) = output::text::start();
+            (Box::new(a), b)
+        }
+        OutputFormat::Slack => {
+            let (a, b) = output::slack::start().context("Cannot start slack")?;
+            (Box::new(a), b)
+        }
+        OutputFormat::Tui => {
+            let (a, b) = output::tui::start().context("Cannot start TUI")?;
+            (Box::new(a), b)
+        }
+    };
+    Ok(output)
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     if std::env::var("RUST_LOG").is_err() {
@@ -216,11 +236,32 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let args = Args::parse();
 
-    let mut output: Box<dyn Output> = match args.output {
-        OutputFormat::Text => Box::new(output::text::start()),
-        OutputFormat::Tui => Box::new(output::tui::start().context("Cannot start TUI")?),
+    let output_types = if args.output.is_empty() {
+        vec![OutputFormat::Text]
+    } else {
+        args.output.clone()
     };
-    let output_pipe = output.get_tx().context("Cannot get output pipe")?;
+
+    if output_types.contains(&OutputFormat::Tui) && args.output.contains(&OutputFormat::Text) {
+        return Err(anyhow::anyhow!(
+            "Cannot use both TUI and Text output together"
+        ));
+    }
+
+    let (mut outputs, output_pipe) = {
+        let len = output_types.len();
+        let mut outputs = Vec::with_capacity(len);
+        let mut output_pipes = Vec::with_capacity(len);
+
+        for output_type in output_types {
+            let (output, tx) = get_output(output_type)?;
+            outputs.push(output);
+            output_pipes.push(tx);
+        }
+
+        let output_pipe = MultiOutput::new(output_pipes);
+        (outputs, output_pipe)
+    };
 
     // Note this will only setup logging for current task, other tasks will use default
     // global logging setup above.
@@ -241,10 +282,7 @@ async fn main() -> Result<()> {
 
     // Send the Start message to output.
     let start = Instant::now();
-    output_pipe
-        .send(Message::Start(task, start))
-        .await
-        .context("Cannot send to output pipe")?;
+    output_pipe.send(Message::Start(task, start)).await;
 
     // Save the error for now so we can cleanup.
     let rc = do_task(task, &args, installs, &output_pipe).await;
@@ -260,18 +298,20 @@ async fn main() -> Result<()> {
     // Send the FinishedAll message to output.
     let result_to_send = match &rc {
         Ok(()) => Ok(()),
-        Err(_) => Err(anyhow!("Tasks had errors")),
+        Err(_) => Err("Tasks had errors".to_string()),
     };
     let stop = Instant::now();
     output_pipe
         .send(output::Message::FinishedAll(result_to_send, stop - start))
-        .await
-        .context("Cannot send to output pipe")?;
+        .await;
 
     // We have to unconfigure logging here (drop guard) so we can release the output handle.
     drop(output_pipe);
     drop(guard);
-    output.wait().await.context("The output plugin failed")?;
+
+    for output in &mut outputs {
+        output.wait().await.context("The output plugin failed")?;
+    }
 
     // Exit with any error we saved above.
     rc
@@ -281,7 +321,7 @@ async fn do_task(
     task: Task,
     args: &Args,
     list_release_names: &[String],
-    output: &output::Sender,
+    output: &output::MultiOutput,
 ) -> Result<()> {
     let mut helm_repos = HelmRepos::new();
 
@@ -291,7 +331,7 @@ async fn do_task(
     for (show_skipped, item) in skipped_list {
         skipped.add(&item);
         if show_skipped {
-            output.send(Message::Skippedjob(item)).await?;
+            output.send(Message::Skippedjob(item)).await;
         }
     }
 
@@ -540,7 +580,7 @@ fn is_ok(skip_depends: bool, some_i: Option<&Installation>, done: &InstallationS
 
 async fn run_jobs_concurrently(
     jobs: Jobs,
-    output: &output::Sender,
+    output: &output::MultiOutput,
     skipped: InstallationSet,
     helm_repos: &HelmRepos,
 ) -> Result<()> {
@@ -551,7 +591,7 @@ async fn run_jobs_concurrently(
     let task = jobs.0;
 
     for job in &jobs.1 {
-        output.send(Message::Newjob(job.clone())).await?;
+        output.send(Message::Newjob(job.clone())).await;
     }
 
     // This process receives requests for jobs and dispatches them
@@ -663,7 +703,7 @@ async fn dispatch_thread(
 async fn worker_thread(
     task: Task,
     tx_dispatch: &mpsc::Sender<Dispatch>,
-    output: &mpsc::Sender<Message>,
+    output: &MultiOutput,
 ) -> Result<()> {
     let mut errors = false;
 
@@ -684,7 +724,7 @@ async fn worker_thread(
         let start = Instant::now();
         output
             .send(Message::StartedJob(install.clone(), start))
-            .await?;
+            .await;
 
         // Execute the job
         let result = run_job(task, &install, output).await;
@@ -701,7 +741,7 @@ async fn worker_thread(
                         Level::ERROR,
                         &format!("job failed: {err}"),
                     )))
-                    .await?;
+                    .await;
                 errors = true;
             }
         }
@@ -709,8 +749,12 @@ async fn worker_thread(
         // Update UI
         let stop = Instant::now();
         output
-            .send(Message::FinishedJob(install.clone(), result, stop - start))
-            .await?;
+            .send(Message::FinishedJob(
+                install.clone(),
+                result.map_err(|err| err.to_string()),
+                stop - start,
+            ))
+            .await;
     }
 
     if errors {

@@ -2,13 +2,15 @@
 use super::Message;
 use super::Output;
 use super::Sender;
+use crate::config::AnnouncePolicy;
 use crate::duration::duration_string;
-use crate::helm::HelmResult;
 use crate::helm::Installation;
 use crate::helm::InstallationId;
 use crate::Task;
+use anyhow::Error;
 use anyhow::Result;
 use async_trait::async_trait;
+use slack_morphism::prelude::*;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::fmt::Write;
@@ -27,8 +29,9 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio::time::interval;
 use tokio::time::Instant;
+use tracing::error;
 
-pub struct TextOutput {
+pub struct SlackOutput {
     thread: Option<JoinHandle<()>>,
 }
 
@@ -185,69 +188,216 @@ fn versions_to_string(state: &State) -> String {
         .to_string()
 }
 
-fn update_results(state: &State, finished: bool) {
-    if finished {
-        let results = results_to_string(state);
-        println!("\n\n{results}");
+pub fn config_env_var(name: &str) -> Result<String, Error> {
+    std::env::var(name).map_err(|e| anyhow::anyhow!("{}: {}", name, e))
+}
 
-        if !state.versions.is_empty() {
-            let versions = versions_to_string(state);
-            println!("\n\n{versions}");
+#[derive(Clone)]
+struct SlackState {
+    token: SlackApiToken,
+    slack_channel: String,
+    announce_slack_channel: String,
+    ts: Option<SlackTs>,
+}
+
+impl SlackState {
+    fn new() -> Result<SlackState> {
+        let slack_channel: String = config_env_var("SLACK_CHANNEL")?;
+        let token_value: SlackApiTokenValue = config_env_var("SLACK_API_TOKEN")?.into();
+        let token: SlackApiToken = SlackApiToken::new(token_value);
+
+        if slack_channel.is_empty() {
+            return Err(anyhow::anyhow!("SLACK_CHANNEL is empty"));
+        }
+
+        if slack_channel.is_empty() {
+            return Err(anyhow::anyhow!("SLACK_API_TOKEN is empty"));
+        }
+
+        let announce_slack_channel: String =
+            config_env_var("SLACK_CHANNEL_ANNOUNCE").unwrap_or_else(|_| slack_channel.clone());
+
+        Ok(SlackState {
+            token,
+            slack_channel,
+            announce_slack_channel,
+            ts: None,
+        })
+    }
+
+    async fn update_slack(&mut self, state: &State) -> Result<()> {
+        if state.task.is_none() {
+            return Ok(());
+        }
+
+        let client = SlackClient::new(SlackClientHyperConnector::new());
+        let session = client.open_session(&self.token);
+
+        let title = slack_title(state);
+
+        let mut installation_blocks = get_installation_blocks(state, &title);
+        let mut outdated_blocks = get_outdated_blocks(state);
+
+        let mut blocks = vec![];
+        blocks.append(&mut installation_blocks);
+        blocks.append(&mut outdated_blocks);
+
+        let content = SlackMessageContent::new()
+            .with_blocks(blocks)
+            .with_text(title);
+
+        if let Some(ts) = &self.ts {
+            let update_req = SlackApiChatUpdateRequest::new(
+                self.slack_channel.clone().into(),
+                content,
+                ts.clone(),
+            );
+            let update_resp = session.chat_update(&update_req).await?;
+            self.ts = Some(update_resp.ts);
+        } else {
+            let post_chat_req =
+                SlackApiChatPostMessageRequest::new(self.slack_channel.clone().into(), content);
+            let post_chat_resp = session.chat_post_message(&post_chat_req).await?;
+            self.ts = Some(post_chat_resp.ts);
+        }
+
+        Ok(())
+    }
+
+    async fn send_finished(&self, state: &State) -> Result<()> {
+        #[allow(clippy::match_same_arms)]
+        let data = state
+            .jobs
+            .iter()
+            .filter_map(|installation| {
+                state
+                    .results
+                    .get(&installation.id)
+                    .map(|(status, _, _)| (installation, status))
+            })
+            .filter(
+                |(installation, _)| match (&installation.announce_policy, state.task) {
+                    (AnnouncePolicy::UpgradeOnly, Some(Task::Upgrade)) => true,
+                    (AnnouncePolicy::AllTasks, _) => true,
+                    (_, _) => false,
+                },
+            );
+
+        let num_data = data.clone().count();
+
+        if num_data > 0 {
+            let mut blocks: Vec<SlackBlock> = Vec::with_capacity(num_data);
+
+            let title = slack_title(state);
+            let markdown = SlackBlockPlainTextOnly::from(title.clone());
+            let heading = SlackHeaderBlock::new(markdown.into());
+            blocks.push(heading.into());
+
+            for (installation, status) in data {
+                let version = installation.get_display_version();
+
+                let verb = match state.task {
+                    Some(Task::Upgrade) => "upgraded to",
+                    Some(Task::Diff) => "diffed with",
+                    Some(Task::Test) => "tested with",
+                    Some(Task::Template) => "templated with",
+                    Some(Task::Outdated) => "version checked with",
+                    None => "processed",
+                };
+                let cluster = installation.cluster_name.clone();
+                let string = format!(
+                    "{status} {} was {verb} {version} on {cluster} namespace {}",
+                    installation.name, installation.namespace
+                );
+                let markdown = SlackBlockMarkDownText::new(string);
+                let block = SlackSectionBlock::new().with_text(markdown.into());
+                blocks.push(block.into());
+            }
+
+            let content = SlackMessageContent::new()
+                .with_blocks(blocks)
+                .with_text(title);
+
+            let client = SlackClient::new(SlackClientHyperConnector::new());
+            let session = client.open_session(&self.token);
+            let post_chat_req = SlackApiChatPostMessageRequest::new(
+                self.announce_slack_channel.clone().into(),
+                content,
+            );
+            session.chat_post_message(&post_chat_req).await?;
+        }
+
+        Ok(())
+    }
+}
+
+fn get_installation_blocks(state: &State, title: &str) -> Vec<SlackBlock> {
+    let status = results_to_string(state);
+    let status = ["```".to_string(), status, "```".to_string()];
+    let status = status.join("\n");
+    let markdown = SlackBlockPlainTextOnly::from(title);
+    let heading = SlackHeaderBlock::new(markdown.into());
+    let markdown = SlackBlockMarkDownText::new(status);
+    let block = SlackSectionBlock::new().with_text(markdown.into());
+    let blocks = slack_blocks![some_into(heading), some_into(block)];
+    blocks
+}
+
+fn get_outdated_blocks(state: &State) -> Vec<SlackBlock> {
+    if state.versions.is_empty() {
+        vec![]
+    } else {
+        let title = "Out of date installations";
+        let status = versions_to_string(state);
+        let status = ["```".to_string(), status, "```".to_string()];
+        let status = status.join("\n");
+        let markdown = SlackBlockPlainTextOnly::from(title);
+        let heading = SlackHeaderBlock::new(markdown.into());
+        let markdown = SlackBlockMarkDownText::new(status);
+        let block = SlackSectionBlock::new().with_text(markdown.into());
+        let blocks = slack_blocks![some_into(heading), some_into(block)];
+        blocks
+    }
+}
+
+fn slack_title(state: &State) -> String {
+    let task = match state.task {
+        Some(Task::Diff) => "diff",
+        Some(Task::Upgrade) => "upgrade",
+        Some(Task::Test) => "test",
+        Some(Task::Template) => "template",
+        Some(Task::Outdated) => "outdated",
+        None => "unknown2",
+    };
+    format!("helmci - {task}")
+}
+
+async fn update_results(state: &State, slack_state: &mut Option<SlackState>, finished: bool) {
+    if let Some(slack) = slack_state {
+        let mut errors = false;
+
+        if let Err(err) = slack.update_slack(state).await {
+            error!("Slack error: {err}");
+            errors = true;
+        }
+
+        if finished {
+            if let Err(err) = slack.send_finished(state).await {
+                error!("Slack error: {err}");
+                errors = true;
+            }
+        }
+
+        if errors {
+            *slack_state = None;
         }
     };
 }
 
-struct GitlabSection {
-    name: String,
-    title: String,
-    duration: Duration,
-}
-
-impl GitlabSection {
-    fn start(&self) {
-        #[allow(clippy::cast_sign_loss)]
-        let start = chrono::offset::Utc::now().timestamp() as u64 - self.duration.as_secs();
-        println!(
-            "\x1B[0Ksection_start:{}:{}[collapsed=true]\r\x1B[0K{}",
-            start, self.name, self.title
-        );
-    }
-    fn stop(&self) {
-        println!(
-            "\x1B[0Ksection_end:{}:{}[collapsed=true]\r\x1B[0K",
-            chrono::offset::Utc::now().timestamp(),
-            self.name,
-        );
-    }
-}
-
 fn process_message(msg: Message, state: &mut State) {
     match msg {
-        Message::InstallationResult(hr) => {
-            let HelmResult {
-                command,
-                result,
-                installation,
-            } = &hr;
-            let result_str = hr.result_line();
-
-            let s = GitlabSection {
-                name: format!("{}_{command:?}", installation.name),
-                title: format!("{} {command} {result_str}", installation.name),
-                duration: hr.duration(),
-            };
-            s.start();
-            println!("------------------------------------------");
-            match result {
-                Ok(success) => print!("{success}"),
-                Err(err) => print!("{err}"),
-            }
-            s.stop();
-        }
-        Message::Log(entry) => println!(
-            "{} {} {} {}",
-            entry.level, entry.target, entry.name, entry.message
-        ),
+        Message::InstallationResult(_hr) => {}
+        Message::Log(_entry) => {}
         Message::Skippedjob(installation) => {
             state
                 .results
@@ -305,8 +455,9 @@ struct State {
     jobs: Vec<Installation>,
     finished: Option<(Status, Duration)>,
 }
-pub fn start() -> (TextOutput, Sender) {
+pub fn start() -> Result<(SlackOutput, Sender)> {
     let (tx, mut rx) = mpsc::channel(50);
+    let mut slack_state = Some(SlackState::new()?);
 
     let thread = tokio::spawn(async move {
         let mut state = State {
@@ -321,7 +472,7 @@ pub fn start() -> (TextOutput, Sender) {
         loop {
             select! {
                 _ = interval.tick() => {
-                    update_results(&state, false);
+                    update_results(&state, &mut slack_state, false).await;
                 },
 
                 msg = rx.recv() => {
@@ -340,19 +491,19 @@ pub fn start() -> (TextOutput, Sender) {
                 }
             }
         }
-        update_results(&state, true);
+        update_results(&state, &mut slack_state, true).await;
     });
 
-    (
-        TextOutput {
+    Ok((
+        SlackOutput {
             thread: Some(thread),
         },
         tx,
-    )
+    ))
 }
 
 #[async_trait]
-impl Output for TextOutput {
+impl Output for SlackOutput {
     async fn wait(&mut self) -> Result<()> {
         if let Some(thread) = self.thread.take() {
             thread.await?;

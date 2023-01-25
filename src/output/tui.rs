@@ -55,7 +55,6 @@ use super::Sender;
 use crate::layer::log;
 
 pub struct TuiOutput {
-    tx: Option<Sender>,
     thread: Option<JoinHandle<Result<()>>>,
 }
 
@@ -593,7 +592,7 @@ impl State {
     }
 }
 
-pub fn start() -> Result<TuiOutput> {
+pub fn start() -> Result<(TuiOutput, Sender)> {
     let stdout = io::stdout();
     crossterm::terminal::enable_raw_mode()?;
     let backend = CrosstermBackend::new(stdout);
@@ -620,11 +619,10 @@ pub fn start() -> Result<TuiOutput> {
     });
 
     let rc = TuiOutput {
-        tx: Some(tx),
         thread: Some(thread),
     };
 
-    Ok(rc)
+    Ok((rc, tx))
 }
 
 async fn process_events(
@@ -661,14 +659,7 @@ async fn process_events(
 
 #[async_trait]
 impl Output for TuiOutput {
-    fn get_tx(&mut self) -> Option<Sender> {
-        self.tx.take()
-    }
-
     async fn wait(&mut self) -> Result<()> {
-        if let Some(tx) = self.tx.take() {
-            drop(tx);
-        }
         if let Some(thread) = self.thread.take() {
             thread.await??;
         }

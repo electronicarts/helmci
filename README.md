@@ -16,7 +16,8 @@ helm plugin install https://github.com/databus23/helm-diff
 
 Edit kubectl context in `example/helm-values/envs/dev/dev-cluster/config.yaml`.
 
-There are two output methods. Add `--output text` (gitlab flavoured text + optional slack) or `--output tui` full screen text mode to the following commands. By default `text` is used.
+There are three output methods. By default the text output is used if nothing else specified.
+Add `--output text` (gitlab flavoured text), `--output slack` or `--output tui` full screen text mode to the following commands. By default `text` is used.
 
 The `tui` full screen text mode has the following keyboard bindings:
 
@@ -171,5 +172,4 @@ As a result a Python program was written as an alternative solution. This is a r
 * Running helmci upgrade on chart that has not changed results in an upgrade regardless. Which depending on the chart could be slow, and adds useless helm metadata to Kubernetes. Ideally need some way to skip charts if nothing has really changed.
 * Should integrate better with secrets mechanisms that do not store plain text version in working directory, such as sops.
 * Should be able to save hash of chart to ensure it is not unexpectedly changed upstream.
-* `text` output method probably should split out slack support somehow into its own output module.
 * No idea how well `text` will work with github, only tested with gitlab.

@@ -11,11 +11,11 @@ use tracing_subscriber::Layer;
 use crate::output;
 
 pub struct CustomLayer {
-    tx: output::Sender,
+    tx: output::MultiOutput,
 }
 
 impl CustomLayer {
-    pub const fn new(tx: output::Sender) -> Self {
+    pub const fn new(tx: output::MultiOutput) -> Self {
         CustomLayer {
             // tx: Mutex::new(RefCell::new(None)),
             tx,
@@ -23,7 +23,7 @@ impl CustomLayer {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LogEntry {
     pub target: String,
     pub name: String,
@@ -67,10 +67,7 @@ where
                 .to_string(),
         };
 
-        let _ = self
-            .tx
-            .try_send(output::Message::Log(entry))
-            .map_err(|err| println!("Error logging: {err}"));
+        self.tx.try_send(output::Message::Log(entry));
     }
 }
 
