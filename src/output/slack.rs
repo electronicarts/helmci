@@ -38,7 +38,7 @@ pub struct SlackOutput {
 #[derive(Copy, Clone)]
 enum Status {
     Pending,
-    InProgess,
+    InProgress,
     Complete,
     Skipped,
     Failed,
@@ -48,7 +48,7 @@ impl Display for Status {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let char = match self {
             Status::Pending => '⚙',
-            Status::InProgess => '☐',
+            Status::InProgress => '☐',
             Status::Complete => '✅',
             Status::Skipped => '𝄩',
             Status::Failed => '❌',
@@ -116,7 +116,7 @@ fn results_to_string(state: &State) -> String {
     };
 
     let status = match &state.finished {
-        None => Status::InProgess,
+        None => Status::InProgress,
         Some((status, _)) => *status,
     };
 
@@ -252,13 +252,13 @@ impl SlackState {
                 content,
                 ts.clone(),
             );
-            let update_resp = session.chat_update(&update_req).await?;
-            self.ts = Some(update_resp.ts);
+            let update_response = session.chat_update(&update_req).await?;
+            self.ts = Some(update_response.ts);
         } else {
             let post_chat_req =
                 SlackApiChatPostMessageRequest::new(self.slack_channel.clone().into(), content);
-            let post_chat_resp = session.chat_post_message(&post_chat_req).await?;
-            self.ts = Some(post_chat_resp.ts);
+            let post_chat_response = session.chat_post_message(&post_chat_req).await?;
+            self.ts = Some(post_chat_response.ts);
         }
 
         Ok(())
@@ -398,7 +398,7 @@ fn process_message(msg: Message, state: &mut State) {
     match msg {
         Message::InstallationResult(_hr) => {}
         Message::Log(_entry) => {}
-        Message::Skippedjob(installation) => {
+        Message::SkippedJob(installation) => {
             state
                 .results
                 .insert(installation.id, (Status::Skipped, None, None));
@@ -411,7 +411,7 @@ fn process_message(msg: Message, state: &mut State) {
                     .insert(installation.id, (our_version, upstream_version));
             }
         }
-        Message::Newjob(installation) => {
+        Message::NewJob(installation) => {
             state
                 .results
                 .insert(installation.id, (Status::Pending, None, None));
@@ -420,7 +420,7 @@ fn process_message(msg: Message, state: &mut State) {
         Message::StartedJob(installation, start_instant) => {
             state.results.insert(
                 installation.id,
-                (Status::InProgess, Some(start_instant), None),
+                (Status::InProgress, Some(start_instant), None),
             );
         }
         Message::FinishedJob(installation, result, duration) => {

@@ -669,7 +669,7 @@ impl Output for TuiOutput {
 
 fn process_message(msg: Message, state: &mut State) {
     match msg {
-        Message::Skippedjob(i) => {
+        Message::SkippedJob(i) => {
             let str = format!("Skipped Job {}", i.name);
             state.logs.add_log(log(tracing::Level::INFO, &str));
             // Need to think about if we want skipped jobs to appear in list or not
@@ -685,7 +685,7 @@ fn process_message(msg: Message, state: &mut State) {
                 state.logs.add_log(log(tracing::Level::INFO, &str));
             }
         }
-        Message::Newjob(i) => {
+        Message::NewJob(i) => {
             let str = format!("Job {}", i.name);
             state.logs.add_log(log(tracing::Level::DEBUG, &str));
             state.job_status.insert(i.id, JobStatus::New);

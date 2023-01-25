@@ -22,9 +22,9 @@ pub mod tui;
 #[derive(Clone, Debug)]
 pub enum Message {
     /// An job is to be skipped.
-    Skippedjob(Installation),
+    SkippedJob(Installation),
     /// A new job that is not going to be skipped.
-    Newjob(Installation),
+    NewJob(Installation),
     /// The version data for a job - only if outdated report requested.
     InstallationVersion(Installation, String, String),
     /// The result of running a single command for a job.

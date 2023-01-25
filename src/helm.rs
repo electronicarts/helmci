@@ -548,7 +548,7 @@ fn parse_version(tag: &str) -> Option<Version> {
     Version::parse(tag).ok()
 }
 
-/// Get the latest veersion for the given `OciDetails`.
+/// Get the latest version for the given `OciDetails`.
 fn get_latest_version(details: OciDetails) -> Option<String> {
     let mut versions = vec![];
     for image in details.image_details {

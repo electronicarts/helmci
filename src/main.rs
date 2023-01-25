@@ -331,7 +331,7 @@ async fn do_task(
     for (show_skipped, item) in skipped_list {
         skipped.add(&item);
         if show_skipped {
-            output.send(Message::Skippedjob(item)).await;
+            output.send(Message::SkippedJob(item)).await;
         }
     }
 
@@ -591,7 +591,7 @@ async fn run_jobs_concurrently(
     let task = jobs.0;
 
     for job in &jobs.1 {
-        output.send(Message::Newjob(job.clone())).await;
+        output.send(Message::NewJob(job.clone())).await;
     }
 
     // This process receives requests for jobs and dispatches them

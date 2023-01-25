@@ -35,7 +35,7 @@ pub struct TextOutput {
 #[derive(Copy, Clone)]
 enum Status {
     Pending,
-    InProgess,
+    InProgress,
     Complete,
     Skipped,
     Failed,
@@ -45,7 +45,7 @@ impl Display for Status {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let char = match self {
             Status::Pending => '⚙',
-            Status::InProgess => '☐',
+            Status::InProgress => '☐',
             Status::Complete => '✅',
             Status::Skipped => '𝄩',
             Status::Failed => '❌',
@@ -113,7 +113,7 @@ fn results_to_string(state: &State) -> String {
     };
 
     let status = match &state.finished {
-        None => Status::InProgess,
+        None => Status::InProgress,
         Some((status, _)) => *status,
     };
 
@@ -248,7 +248,7 @@ fn process_message(msg: Message, state: &mut State) {
             "{} {} {} {}",
             entry.level, entry.target, entry.name, entry.message
         ),
-        Message::Skippedjob(installation) => {
+        Message::SkippedJob(installation) => {
             state
                 .results
                 .insert(installation.id, (Status::Skipped, None, None));
@@ -261,7 +261,7 @@ fn process_message(msg: Message, state: &mut State) {
                     .insert(installation.id, (our_version, upstream_version));
             }
         }
-        Message::Newjob(installation) => {
+        Message::NewJob(installation) => {
             state
                 .results
                 .insert(installation.id, (Status::Pending, None, None));
@@ -270,7 +270,7 @@ fn process_message(msg: Message, state: &mut State) {
         Message::StartedJob(installation, start_instant) => {
             state.results.insert(
                 installation.id,
-                (Status::InProgess, Some(start_instant), None),
+                (Status::InProgress, Some(start_instant), None),
             );
         }
         Message::FinishedJob(installation, result, duration) => {
