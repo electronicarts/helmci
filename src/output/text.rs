@@ -22,10 +22,8 @@ use tabled::Style;
 use tabled::Table;
 use tabled::Tabled;
 use tokio;
-use tokio::select;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
-use tokio::time::interval;
 use tokio::time::Instant;
 
 pub struct TextOutput {
@@ -317,28 +315,8 @@ pub fn start() -> (TextOutput, Sender) {
             jobs: Vec::new(),
             finished: None,
         };
-        let mut interval = interval(Duration::from_secs(2));
-        loop {
-            select! {
-                _ = interval.tick() => {
-                    update_results(&state, false);
-                },
-
-                msg = rx.recv() => {
-                    if let Some(msg) = msg {
-                        process_message(msg, &mut state);
-                    } else {
-                        // Note interval.tick() will go for ever, so this is the main exit point.
-                        // Will happen when sender closes rx pipe.
-                        break;
-                    };
-                },
-
-                else => {
-                    // This will not get called.
-                    break;
-                }
-            }
+        while let Some(msg) = rx.recv().await {
+            process_message(msg, &mut state);
         }
         update_results(&state, true);
     });
