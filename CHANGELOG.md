@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.4](https://github.com/electronicarts/helmci/compare/v0.1.3...v0.1.4) (2023-01-26)
+
+
+### Bug Fixes
+
+* Don't create draft release ([aa13021](https://github.com/electronicarts/helmci/commit/aa13021dc1545921a4e71a84530ed92994f9d82e))
+* Simplify text message loop ([e6a541a](https://github.com/electronicarts/helmci/commit/e6a541a45d3aedecd8dda255cadc6d180e782537))
+
 ## [0.1.3](https://github.com/electronicarts/helmci/compare/v0.1.2...v0.1.3) (2023-01-25)
 
 
