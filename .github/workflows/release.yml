@@ -24,7 +24,6 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           release-type: rust
-          draft: true
 
   github_build:
     name: Build release binaries
@@ -104,7 +103,7 @@ jobs:
         run: cargo install --version 0.3.4 cargo-wix
         env:
           # cargo-wix does not require static crt
-          RUSTFLAGS: ''
+          RUSTFLAGS: ""
 
       - name: Build | Build
         uses: actions-rs/cargo@v1.0.3
