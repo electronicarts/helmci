@@ -715,10 +715,7 @@ async fn worker_thread(
             .await?;
         let some_i = rx_response.await?;
 
-        let install = match some_i {
-            Some(i) => i,
-            None => break,
-        };
+        let Some(install) = some_i else { break };
 
         // Update UI
         let start = Instant::now();
