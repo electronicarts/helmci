@@ -29,7 +29,6 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio::time::interval;
 use tokio::time::Instant;
-use tracing::error;
 
 pub struct SlackOutput {
     thread: Option<JoinHandle<()>>,
@@ -286,7 +285,7 @@ impl SlackState {
         let num_data = data.clone().count();
 
         if num_data > 0 {
-            let mut blocks: Vec<SlackBlock> = Vec::with_capacity(num_data);
+            let mut blocks: Vec<SlackBlock> = Vec::with_capacity(num_data + 1);
 
             let title = slack_title(state);
             let markdown = SlackBlockPlainTextOnly::from(title.clone());
@@ -327,6 +326,55 @@ impl SlackState {
             session.chat_post_message(&post_chat_req).await?;
         }
 
+        Ok(())
+    }
+
+    async fn log_helm_result(&self, state: &State, hr: &crate::helm::HelmResult) -> Result<()> {
+        let mut blocks: Vec<SlackBlock> = Vec::with_capacity(5);
+
+        let title = slack_title(state);
+        let markdown = SlackBlockPlainTextOnly::from(title.clone());
+        let heading = SlackHeaderBlock::new(markdown.into());
+        blocks.push(heading.into());
+
+        let cmd = match &hr.result {
+            Ok(success) => &success.cmd,
+            Err(err) => &err.cmd,
+        };
+
+        let markdown = SlackBlockPlainTextOnly::from(cmd.to_string());
+        let block = SlackSectionBlock::new().with_text(markdown.into());
+        blocks.push(block.into());
+
+        let markdown = SlackBlockPlainTextOnly::from(hr.result_line());
+        let block = SlackSectionBlock::new().with_text(markdown.into());
+        blocks.push(block.into());
+
+        let string = truncate(hr.stdout(), 150);
+        if !string.is_empty() {
+            let string = format!("```{string}```\n");
+            let markdown = SlackBlockMarkDownText::from(string);
+            let block = SlackSectionBlock::new().with_text(markdown.into());
+            blocks.push(block.into());
+        }
+
+        let string = truncate(hr.stderr(), 150);
+        if !string.is_empty() {
+            let string = format!("```{string}```\n");
+            let markdown = SlackBlockMarkDownText::from(string);
+            let block = SlackSectionBlock::new().with_text(markdown.into());
+            blocks.push(block.into());
+        }
+
+        let content = SlackMessageContent::new()
+            .with_blocks(blocks)
+            .with_text(title);
+
+        let client = SlackClient::new(SlackClientHyperConnector::new());
+        let session = client.open_session(&self.token);
+        let post_chat_req =
+            SlackApiChatPostMessageRequest::new(self.slack_channel.clone().into(), content);
+        session.chat_post_message(&post_chat_req).await?;
         Ok(())
     }
 }
@@ -372,31 +420,28 @@ fn slack_title(state: &State) -> String {
     format!("helmci - {task}")
 }
 
-async fn update_results(state: &State, slack_state: &mut Option<SlackState>, finished: bool) {
-    if let Some(slack) = slack_state {
-        let mut errors = false;
+async fn update_results(state: &State, slack: &mut SlackState, finished: bool) {
+    if let Err(err) = slack.update_slack(state).await {
+        println!("Slack error: {err}");
+    }
 
-        if let Err(err) = slack.update_slack(state).await {
-            error!("Slack error: {err}");
-            errors = true;
+    if finished {
+        if let Err(err) = slack.send_finished(state).await {
+            println!("Slack error: {err}");
         }
-
-        if finished {
-            if let Err(err) = slack.send_finished(state).await {
-                error!("Slack error: {err}");
-                errors = true;
-            }
-        }
-
-        if errors {
-            *slack_state = None;
-        }
-    };
+    }
 }
 
-fn process_message(msg: Message, state: &mut State) {
+async fn process_message(msg: Message, state: &mut State, slack: &SlackState) {
     match msg {
-        Message::InstallationResult(_hr) => {}
+        Message::InstallationResult(hr) => {
+            if hr.is_err() {
+                slack
+                    .log_helm_result(state, &hr)
+                    .await
+                    .unwrap_or_else(|err| println!("Slack error: {err}"));
+            }
+        }
         Message::Log(_entry) => {}
         Message::SkippedJob(installation) => {
             state
@@ -457,7 +502,7 @@ struct State {
 }
 pub fn start() -> Result<(SlackOutput, Sender)> {
     let (tx, mut rx) = mpsc::channel(50);
-    let mut slack_state = Some(SlackState::new()?);
+    let mut slack_state = SlackState::new()?;
 
     let thread = tokio::spawn(async move {
         let mut state = State {
@@ -468,7 +513,9 @@ pub fn start() -> Result<(SlackOutput, Sender)> {
             jobs: Vec::new(),
             finished: None,
         };
-        let mut interval = interval(Duration::from_secs(2));
+
+        // Slack will rate limit us if we send too many messages, so we need to throttle.
+        let mut interval = interval(Duration::from_secs(5));
         loop {
             select! {
                 _ = interval.tick() => {
@@ -477,7 +524,7 @@ pub fn start() -> Result<(SlackOutput, Sender)> {
 
                 msg = rx.recv() => {
                     if let Some(msg) = msg {
-                        process_message(msg, &mut state);
+                        process_message(msg, &mut state, &slack_state).await;
                     } else {
                         // Note interval.tick() will go for ever, so this is the main exit point.
                         // Will happen when sender closes rx pipe.
