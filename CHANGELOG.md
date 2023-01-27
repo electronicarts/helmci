@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/electronicarts/helmci/compare/v0.1.4...v0.2.0) (2023-01-27)
+
+
+### Features
+
+* Slack outputs full error messages from helm ([e1929a6](https://github.com/electronicarts/helmci/commit/e1929a614a788b9bd022a8cfbec304b331e4e664))
+
+
+### Bug Fixes
+
+* Clippy warning under rust 1.67 ([9585788](https://github.com/electronicarts/helmci/commit/958578895e251425077ac88207ebb1fdacea33f0))
+
 ## [0.1.4](https://github.com/electronicarts/helmci/compare/v0.1.3...v0.1.4) (2023-01-26)
 
 
