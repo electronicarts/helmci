@@ -15,7 +15,7 @@ use tokio::{io, process::Command};
 
 use crate::duration::duration_string;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct CommandSuccess {
     pub cmd: CommandLine,
     pub stdout: String,
@@ -58,7 +58,7 @@ impl Display for CommandSuccess {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct CommandError {
     pub cmd: CommandLine,
     pub stdout: String,
@@ -68,10 +68,10 @@ pub struct CommandError {
     pub kind: CommandErrorKind,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum CommandErrorKind {
     BadExitCode {},
-    FailedToStart { err: String },
+    FailedToStart { err: std::io::Error },
     Utf8Error { err: Utf8Error },
 }
 
@@ -173,9 +173,7 @@ impl CommandLine {
         };
 
         let kind = match output {
-            Err(err) => Err(CommandErrorKind::FailedToStart {
-                err: err.to_string(),
-            }),
+            Err(err) => Err(CommandErrorKind::FailedToStart { err }),
             Ok(output) => {
                 if output.status.success() {
                     Ok(())

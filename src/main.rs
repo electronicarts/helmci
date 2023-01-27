@@ -15,6 +15,7 @@ use std::collections::hash_map::Iter;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::str;
+use std::sync::Arc;
 
 use anyhow::Result;
 use anyhow::{anyhow, Context};
@@ -70,7 +71,7 @@ pub enum Task {
     Outdated,
 }
 
-type Jobs = (Task, Vec<Installation>);
+type Jobs = (Task, Vec<Arc<Installation>>);
 
 fn get_required_repos(jobs: &Jobs, helm_repos: &HelmRepos) -> Vec<HelmRepo> {
     let mut names = HashSet::new();
@@ -110,7 +111,7 @@ async fn helm_remove_repos_for_jobs(repos: &[HelmRepo]) -> Result<()> {
     Ok(())
 }
 
-async fn run_job(task: Task, installation: &Installation, tx: &MultiOutput) -> Result<()> {
+async fn run_job(task: Task, installation: &Arc<Installation>, tx: &MultiOutput) -> Result<()> {
     match task {
         Task::Upgrade => {
             helm::upgrade(installation, tx, true).await?;
@@ -395,18 +396,18 @@ impl<'a> Iterator for HelmIter<'a> {
     }
 }
 
-type SkippedResult = (bool, Installation);
+type SkippedResult = (bool, Arc<Installation>);
 
 fn generate_todo(
     args: &Args,
     list_release_names: &[String],
     helm_repos: &mut HelmRepos,
-) -> Result<(Vec<SkippedResult>, Vec<Installation>), anyhow::Error> {
+) -> Result<(Vec<SkippedResult>, Vec<Arc<Installation>>), anyhow::Error> {
     let vdir = PathBuf::from(&args.vdir);
     let envs = Env::list_all_env(&vdir)
         .with_context(|| format!("Cannot list envs from vdir {}", vdir.display()))?;
-    let mut todo: Vec<Installation> = Vec::new();
-    let mut skipped: Vec<(bool, Installation)> = Vec::new();
+    let mut todo: Vec<Arc<Installation>> = Vec::new();
+    let mut skipped: Vec<(bool, Arc<Installation>)> = Vec::new();
     let mut seen = InstallationSet::default();
     let mut next_id: InstallationId = 0;
 
@@ -488,6 +489,7 @@ fn generate_todo(
                 seen.add(&installation);
 
                 // Note: skipped installs count towards dependancy requirements
+                let installation = Arc::new(installation);
                 if skip {
                     skipped.push((!hide_skip, installation));
                 } else {
@@ -570,11 +572,11 @@ const NUM_THREADS: usize = 6;
 
 #[derive(Debug)]
 enum Dispatch {
-    RequestNextJob(oneshot::Sender<Option<Installation>>),
+    RequestNextJob(oneshot::Sender<Option<Arc<Installation>>>),
     Done(HashIndex),
 }
 
-fn is_ok(skip_depends: bool, some_i: Option<&Installation>, done: &InstallationSet) -> bool {
+fn is_ok(skip_depends: bool, some_i: Option<&Arc<Installation>>, done: &InstallationSet) -> bool {
     some_i.map_or(false, |i| skip_depends || is_depends_ok(i, done))
 }
 
@@ -660,12 +662,12 @@ async fn run_jobs_concurrently(
 }
 
 async fn dispatch_thread(
-    jobs: (Task, Vec<Installation>),
+    jobs: (Task, Vec<Arc<Installation>>),
     skipped: InstallationSet,
     mut rx_dispatch: mpsc::Receiver<Dispatch>,
     skip_depends: bool,
 ) -> Result<(), anyhow::Error> {
-    let mut installations: Vec<Option<&Installation>> = jobs.1.iter().map(Some).collect();
+    let mut installations: Vec<Option<&Arc<Installation>>> = jobs.1.iter().map(Some).collect();
     let mut done = skipped;
     while let Some(msg) = rx_dispatch.recv().await {
         match msg {

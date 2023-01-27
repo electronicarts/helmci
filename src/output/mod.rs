@@ -5,7 +5,7 @@
 //! A job may consist of one or more commands that need to be executed for successful completion of the job.
 use anyhow::Result;
 use async_trait::async_trait;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 use tokio::{sync::mpsc, time::Instant};
 
 use crate::{
@@ -19,20 +19,20 @@ pub mod text;
 pub mod tui;
 
 /// A message to the output module.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum Message {
     /// An job is to be skipped.
-    SkippedJob(Installation),
+    SkippedJob(Arc<Installation>),
     /// A new job that is not going to be skipped.
-    NewJob(Installation),
+    NewJob(Arc<Installation>),
     /// The version data for a job - only if outdated report requested.
-    InstallationVersion(Installation, String, String),
+    InstallationVersion(Arc<Installation>, String, String),
     /// The result of running a single command for a job.
-    InstallationResult(HelmResult),
+    InstallationResult(Arc<HelmResult>),
     /// Notification that we started a job.
-    StartedJob(Installation, Instant),
+    StartedJob(Arc<Installation>, Instant),
     /// Notification that we finished a job.
-    FinishedJob(Installation, Result<(), String>, Duration),
+    FinishedJob(Arc<Installation>, Result<(), String>, Duration),
 
     /// A Log entry was logged.
     Log(LogEntry),
@@ -54,6 +54,7 @@ impl MultiOutput {
     }
 
     pub async fn send(&self, msg: Message) {
+        let msg = Arc::new(msg);
         for tx in &self.tx {
             tx.send(msg.clone()).await.unwrap_or_else(|err| {
                 print!("Cannot send message to output pipe: {err}");
@@ -61,8 +62,8 @@ impl MultiOutput {
         }
     }
 
-    #[allow(clippy::needless_pass_by_value)]
     pub fn try_send(&self, msg: Message) {
+        let msg = Arc::new(msg);
         for tx in &self.tx {
             tx.try_send(msg.clone()).unwrap_or_else(|err| {
                 print!("Cannot send message to output pipe: {err}");
@@ -71,7 +72,7 @@ impl MultiOutput {
     }
 }
 
-pub type Sender = mpsc::Sender<Message>;
+pub type Sender = mpsc::Sender<Arc<Message>>;
 
 /// Every output module should implement this trait.
 #[async_trait]

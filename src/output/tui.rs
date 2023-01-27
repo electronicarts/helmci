@@ -165,7 +165,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, state: &mut State) {
     };
 
     let default_text: &dyn HasMultilineText = if let Some(job) = job_or_none {
-        job
+        job.as_ref()
     } else {
         &state.logs
     };
@@ -533,7 +533,7 @@ struct State {
     task: Option<Task>,
     start_instant: Option<Instant>,
     mode: DisplayMode,
-    jobs: StatefulList<Installation>,
+    jobs: StatefulList<Arc<Installation>>,
     job_status: HashMap<InstallationId, JobStatus>,
     commands: Vec<Arc<HelmResult>>,
     selected_commands: StatefulList<Arc<HelmResult>>,
@@ -566,8 +566,7 @@ impl State {
         }
     }
 
-    fn add_command(&mut self, ir: HelmResult) {
-        let ir = Arc::new(ir);
+    fn add_command(&mut self, ir: Arc<HelmResult>) {
         if let Some(job) = self.jobs.get_selected() {
             if job.id == ir.installation.id {
                 self.selected_commands.items.push(ir.clone());
@@ -576,7 +575,7 @@ impl State {
         self.commands.push(ir);
     }
 
-    fn update_selected_items(&mut self, installation: Option<Installation>) {
+    fn update_selected_items(&mut self, installation: Option<Arc<Installation>>) {
         let list = if let Some(installation) = installation {
             let list = self
                 .commands
@@ -626,14 +625,14 @@ pub fn start() -> Result<(TuiOutput, Sender)> {
 }
 
 async fn process_events(
-    mut rx: mpsc::Receiver<Message>,
+    mut rx: mpsc::Receiver<Arc<Message>>,
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
     mut state: State,
 ) -> Result<()> {
     loop {
         select! {
             Some(msg) = rx.recv() => {
-                process_message(msg, &mut state);
+                process_message(&msg, &mut state);
             }
             Some(Ok(event)) = state.reader.next() => {
                 process_event(&event, &mut state);
@@ -667,8 +666,8 @@ impl Output for TuiOutput {
     }
 }
 
-fn process_message(msg: Message, state: &mut State) {
-    match msg {
+fn process_message(msg: &Arc<Message>, state: &mut State) {
+    match msg.as_ref() {
         Message::SkippedJob(i) => {
             let str = format!("Skipped Job {}", i.name);
             state.logs.add_log(log(tracing::Level::INFO, &str));
@@ -689,43 +688,43 @@ fn process_message(msg: Message, state: &mut State) {
             let str = format!("Job {}", i.name);
             state.logs.add_log(log(tracing::Level::DEBUG, &str));
             state.job_status.insert(i.id, JobStatus::New);
-            state.jobs.items.push(i);
+            state.jobs.items.push(i.clone());
         }
         Message::InstallationResult(ir) => {
-            state.add_command(ir);
+            state.add_command(ir.clone());
         }
         Message::StartedJob(i, start_instant) => {
             let str = format!("Started {}", i.name);
             state.logs.add_log(log(tracing::Level::INFO, &str));
             state
                 .job_status
-                .insert(i.id, JobStatus::Started(start_instant));
+                .insert(i.id, JobStatus::Started(*start_instant));
         }
         Message::FinishedJob(i, result, duration) => {
             let str = format!("Finished {}", i.name);
             state.logs.add_log(log(tracing::Level::INFO, &str));
             state
                 .job_status
-                .insert(i.id, JobStatus::Finished(result.is_ok(), duration));
+                .insert(i.id, JobStatus::Finished(result.is_ok(), *duration));
             if result.is_err() {
                 state.has_errors = true;
             }
         }
         Message::Log(entry) => {
-            state.logs.add_log(entry);
+            state.logs.add_log(entry.clone());
         }
         Message::Start(task, start_instant) => {
-            state.task = Some(task);
-            state.start_instant = Some(start_instant);
+            state.task = Some(*task);
+            state.start_instant = Some(*start_instant);
         }
         Message::FinishedAll(result, duration) => {
             if result.is_err() {
                 state.has_errors = true;
             };
-            let str = format!("Finished Everything {}", duration_string(&duration));
+            let str = format!("Finished Everything {}", duration_string(duration));
             state.logs.add_log(log(tracing::Level::INFO, &str));
             state.finished = true;
-            state.finished_duration = Some(duration);
+            state.finished_duration = Some(*duration);
         }
     }
 }

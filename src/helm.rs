@@ -9,6 +9,7 @@ use serde::Deserialize;
 use std::{
     fmt::{Debug, Display},
     path::PathBuf,
+    sync::Arc,
     time::Duration,
 };
 use tracing::{debug, error};
@@ -22,14 +23,14 @@ use crate::{
 };
 
 /// A reference to a Helm Repo.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct HelmRepo {
     pub name: String,
     pub url: String,
 }
 
 /// A reference to a helm chart.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum HelmChart {
     Dir(PathBuf),
     HelmRepo {
@@ -48,7 +49,7 @@ pub enum HelmChart {
 pub type InstallationId = u16;
 
 /// All the information required for an helm release to be processed.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Installation {
     pub name: String,
     pub namespace: String,
@@ -99,15 +100,19 @@ impl Display for Command {
 }
 
 /// The results of running an installation command.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct HelmResult {
-    pub installation: Installation,
+    pub installation: Arc<Installation>,
     pub result: CommandResult,
     pub command: Command,
 }
 
 impl HelmResult {
-    fn from_result(installation: &Installation, result: CommandResult, command: Command) -> Self {
+    fn from_result(
+        installation: &Arc<Installation>,
+        result: CommandResult,
+        command: Command,
+    ) -> Self {
         HelmResult {
             installation: installation.clone(),
             result,
@@ -212,7 +217,7 @@ pub async fn remove_repo(
 }
 
 /// Run the lint command.
-pub async fn lint(installation: &Installation, tx: &MultiOutput) -> Result<()> {
+pub async fn lint(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<()> {
     if let HelmChart::Dir(dir) = &installation.chart {
         let mut args = vec![
             "lint".to_string(),
@@ -234,6 +239,7 @@ pub async fn lint(installation: &Installation, tx: &MultiOutput) -> Result<()> {
         let result = command_line.run().await;
         let has_errors = result.is_err();
         let i_result = HelmResult::from_result(installation, result, Command::Lint);
+        let i_result = Arc::new(i_result);
         tx.send(Message::InstallationResult(i_result)).await;
 
         if has_errors {
@@ -282,7 +288,7 @@ fn get_args_from_chart(chart: &HelmChart) -> Result<(String, Vec<String>)> {
 }
 
 /// Run the helm template command.
-pub async fn template(installation: &Installation, tx: &MultiOutput) -> Result<()> {
+pub async fn template(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<()> {
     let (chart, mut chart_args) = get_args_from_chart(&installation.chart)?;
 
     let mut args = vec![
@@ -308,6 +314,7 @@ pub async fn template(installation: &Installation, tx: &MultiOutput) -> Result<(
     let result = command_line.run().await;
     let has_errors = result.is_err();
     let i_result = HelmResult::from_result(installation, result, Command::Template);
+    let i_result = Arc::new(i_result);
     tx.send(Message::InstallationResult(i_result)).await;
 
     if has_errors {
@@ -318,7 +325,7 @@ pub async fn template(installation: &Installation, tx: &MultiOutput) -> Result<(
 }
 
 /// Run the helm diff command.
-pub async fn diff(installation: &Installation, tx: &MultiOutput) -> Result<()> {
+pub async fn diff(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<()> {
     let (chart, mut chart_args) = get_args_from_chart(&installation.chart)?;
 
     let mut args = vec![
@@ -347,6 +354,7 @@ pub async fn diff(installation: &Installation, tx: &MultiOutput) -> Result<()> {
     let result = command_line.run().await;
     let has_errors = result.is_err();
     let i_result = HelmResult::from_result(installation, result, Command::Diff);
+    let i_result = Arc::new(i_result);
     tx.send(Message::InstallationResult(i_result)).await;
 
     if has_errors {
@@ -357,7 +365,11 @@ pub async fn diff(installation: &Installation, tx: &MultiOutput) -> Result<()> {
 }
 
 /// Run the helm upgrade command.
-pub async fn upgrade(installation: &Installation, tx: &MultiOutput, dry_run: bool) -> Result<()> {
+pub async fn upgrade(
+    installation: &Arc<Installation>,
+    tx: &MultiOutput,
+    dry_run: bool,
+) -> Result<()> {
     let (chart, mut chart_args) = get_args_from_chart(&installation.chart)?;
 
     let mut args = vec![
@@ -395,6 +407,7 @@ pub async fn upgrade(installation: &Installation, tx: &MultiOutput, dry_run: boo
         Command::Upgrade
     };
     let i_result = HelmResult::from_result(installation, result, command);
+    let i_result = Arc::new(i_result);
     tx.send(Message::InstallationResult(i_result)).await;
 
     if has_errors {
@@ -405,7 +418,7 @@ pub async fn upgrade(installation: &Installation, tx: &MultiOutput, dry_run: boo
 }
 
 /// Run the helm outdated command.
-pub async fn outdated(installation: &Installation, tx: &MultiOutput) -> Result<()> {
+pub async fn outdated(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<()> {
     match &installation.chart {
         HelmChart::Dir(_) => {}
         HelmChart::HelmRepo {
@@ -434,7 +447,7 @@ struct HelmVersionInfo {
 
 /// Generate the outdated report for a helm chart reference.
 async fn outdated_helm_chart(
-    installation: &Installation,
+    installation: &Arc<Installation>,
     repo: &HelmRepo,
     chart_name: &str,
     chart_version: &str,
@@ -462,6 +475,7 @@ async fn outdated_helm_chart(
     };
 
     let i_result = HelmResult::from_result(installation, result, Command::Outdated);
+    let i_result = Arc::new(i_result);
     tx.send(Message::InstallationResult(i_result)).await;
 
     if has_errors {
@@ -495,7 +509,7 @@ struct ImageDetails {
 
 /// Generate the outdated report for an OCI chart reference stored on ECR.
 async fn outdated_oci_chart(
-    installation: &Installation,
+    installation: &Arc<Installation>,
     repo_url: &str,
     chart_name: &str,
     chart_version: &str,
@@ -534,6 +548,7 @@ async fn outdated_oci_chart(
     };
 
     let i_result = HelmResult::from_result(installation, result, Command::Outdated);
+    let i_result = Arc::new(i_result);
     tx.send(Message::InstallationResult(i_result)).await;
 
     if has_errors {

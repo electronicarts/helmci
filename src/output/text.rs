@@ -12,6 +12,7 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::fmt::Write;
+use std::sync::Arc;
 use std::time::Duration;
 use tabled::object::Columns;
 use tabled::object::Rows;
@@ -219,14 +220,14 @@ impl GitlabSection {
     }
 }
 
-fn process_message(msg: Message, state: &mut State) {
-    match msg {
+fn process_message(msg: &Arc<Message>, state: &mut State) {
+    match msg.as_ref() {
         Message::InstallationResult(hr) => {
             let HelmResult {
                 command,
                 result,
                 installation,
-            } = &hr;
+            } = hr.as_ref();
             let result_str = hr.result_line();
 
             let s = GitlabSection {
@@ -250,25 +251,26 @@ fn process_message(msg: Message, state: &mut State) {
             state
                 .results
                 .insert(installation.id, (Status::Skipped, None, None));
-            state.jobs.push(installation);
+            state.jobs.push(installation.clone());
         }
         Message::InstallationVersion(installation, our_version, upstream_version) => {
             if our_version != upstream_version {
-                state
-                    .versions
-                    .insert(installation.id, (our_version, upstream_version));
+                state.versions.insert(
+                    installation.id,
+                    (our_version.clone(), upstream_version.clone()),
+                );
             }
         }
         Message::NewJob(installation) => {
             state
                 .results
                 .insert(installation.id, (Status::Pending, None, None));
-            state.jobs.push(installation);
+            state.jobs.push(installation.clone());
         }
         Message::StartedJob(installation, start_instant) => {
             state.results.insert(
                 installation.id,
-                (Status::InProgress, Some(start_instant), None),
+                (Status::InProgress, Some(*start_instant), None),
             );
         }
         Message::FinishedJob(installation, result, duration) => {
@@ -278,18 +280,18 @@ fn process_message(msg: Message, state: &mut State) {
             };
             state
                 .results
-                .insert(installation.id, (status, None, Some(duration)));
+                .insert(installation.id, (status, None, Some(*duration)));
         }
         Message::FinishedAll(rc, duration) => {
             let status = match rc {
                 Ok(_) => Status::Complete,
                 Err(_) => Status::Failed,
             };
-            state.finished = Some((status, duration));
+            state.finished = Some((status, *duration));
         }
         Message::Start(task, start_instant) => {
-            state.task = Some(task);
-            state.start_instant = Some(start_instant);
+            state.task = Some(*task);
+            state.start_instant = Some(*start_instant);
         }
     }
 }
@@ -300,7 +302,7 @@ struct State {
     start_instant: Option<Instant>,
     results: HashMap<InstallationId, (Status, Option<Instant>, Option<Duration>)>,
     versions: HashMap<InstallationId, (String, String)>,
-    jobs: Vec<Installation>,
+    jobs: Vec<Arc<Installation>>,
     finished: Option<(Status, Duration)>,
 }
 pub fn start() -> (TextOutput, Sender) {
@@ -316,7 +318,7 @@ pub fn start() -> (TextOutput, Sender) {
             finished: None,
         };
         while let Some(msg) = rx.recv().await {
-            process_message(msg, &mut state);
+            process_message(&msg, &mut state);
         }
         update_results(&state, true);
     });
