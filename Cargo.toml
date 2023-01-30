@@ -26,4 +26,4 @@ tracing = "0.1.5"
 tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
 semver = "1.0.16"
 url = "2.2.2"
-futures = "0.3.18"
+futures = "0.3.26"
