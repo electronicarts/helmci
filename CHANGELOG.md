@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/electronicarts/helmci/compare/v0.2.0...v0.2.1) (2023-02-02)
+
+
+### Bug Fixes
+
+* Use Arc instead of clone for large shared objects ([a93cfbc](https://github.com/electronicarts/helmci/commit/a93cfbc3173f8342db806d1f5e88f902fcfc530e))
+
 ## [0.2.0](https://github.com/electronicarts/helmci/compare/v0.1.4...v0.2.0) (2023-01-27)
 
 
