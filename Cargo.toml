@@ -20,7 +20,7 @@ tokio = { version = "1", features = ["full"] }
 slack-morphism = { version = "1.4.2", features = ["hyper"] }
 chrono = "0.4.19"
 hyper-rustls = "0.23.2"
-hyper = "0.14.18"
+hyper = "0.14.24"
 async-trait = "0.1.64"
 tracing = "0.1.5"
 tracing-subscriber = { version = "0.3.11", features = ["env-filter"] }
