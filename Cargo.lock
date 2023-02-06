@@ -53,9 +53,9 @@ checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
 name = "base64"
-version = "0.20.0"
+version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ea22880d78093b0cbe17c89f64a7d457941e65759157ec6cb31a31d652b05e5"
+checksum = "a4a4ddaa51a5bc52a6948f74c06d20aaaddb71924eab79b8c97a8c556e942d6a"
 
 [[package]]
 name = "bitflags"
@@ -1348,13 +1348,13 @@ dependencies = [
 
 [[package]]
 name = "slack-morphism"
-version = "1.4.2"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a55dcc8a26a2af2bdf406158d2ed2ab128216f5fdea887b711675e6807134cee"
+checksum = "d1c970575c8f761e08e4047afc9accd78f68461e8c4704ff7205d8e924f6b1fe"
 dependencies = [
  "async-recursion",
  "async-trait",
- "base64 0.20.0",
+ "base64 0.21.0",
  "bytes",
  "chrono",
  "futures",
