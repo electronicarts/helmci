@@ -17,7 +17,7 @@ tui = "0.19.0"
 crossterm = { version = "0.26.0", features = ["event-stream"] }
 tabled = "0.10.0"
 tokio = { version = "1", features = ["full"] }
-slack-morphism = { version = "1.6.0", features = ["hyper"] }
+slack-morphism = { version = "1.6.1", features = ["hyper"] }
 chrono = "0.4.19"
 hyper-rustls = "0.23.2"
 hyper = "0.14.24"
