@@ -1239,6 +1239,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_urlencoded"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3491c14715ca2294c4d6a88f15e84739788c1d030eed8c110436aafdaa2f3fd"
+dependencies = [
+ "form_urlencoded",
+ "itoa",
+ "ryu",
+ "serde",
+]
+
+[[package]]
 name = "serde_with"
 version = "1.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1348,9 +1360,9 @@ dependencies = [
 
 [[package]]
 name = "slack-morphism"
-version = "1.7.0"
+version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85be7e2644c54b07759e039db218cde5ef4bc381e9841337e9ed333ce24e885c"
+checksum = "d85efae2fb656c3137d67ac56ab0c38d141bf06f4e177e212db65f29804b8104"
 dependencies = [
  "async-recursion",
  "async-trait",
@@ -1372,6 +1384,7 @@ dependencies = [
  "rvstruct",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "serde_with",
  "signal-hook",
  "signal-hook-tokio",
