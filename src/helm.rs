@@ -45,6 +45,14 @@ pub enum HelmChart {
     },
 }
 
+fn helm_path() -> String {
+    std::env::var("HELM_PATH").unwrap_or_else(|_| "helm".to_string())
+}
+
+fn aws_path() -> String {
+    std::env::var("AWS_PATH").unwrap_or_else(|_| "aws".to_string())
+}
+
 /// A unique identifier for an installation.
 pub type InstallationId = u16;
 
@@ -235,7 +243,7 @@ pub async fn lint(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<
         args.push(path_to_string(dir)?);
         args.append(&mut get_template_parameters(installation));
 
-        let command_line = CommandLine("helm".to_string(), args);
+        let command_line = CommandLine(helm_path(), args);
         let result = command_line.run().await;
         let has_errors = result.is_err();
         let i_result = HelmResult::from_result(installation, result, Command::Lint);
@@ -310,7 +318,7 @@ pub async fn template(installation: &Arc<Installation>, tx: &MultiOutput) -> Res
     args.append(&mut chart_args);
     args.append(&mut get_template_parameters(installation));
 
-    let command_line = CommandLine("helm".to_string(), args);
+    let command_line = CommandLine(helm_path(), args);
     let result = command_line.run().await;
     let has_errors = result.is_err();
     let i_result = HelmResult::from_result(installation, result, Command::Template);
@@ -350,7 +358,7 @@ pub async fn diff(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<
     args.append(&mut chart_args);
     args.append(&mut get_template_parameters(installation));
 
-    let command_line = CommandLine("helm".to_string(), args);
+    let command_line = CommandLine(helm_path(), args);
     let result = command_line.run().await;
     let has_errors = result.is_err();
     let i_result = HelmResult::from_result(installation, result, Command::Diff);
@@ -398,7 +406,7 @@ pub async fn upgrade(
         args.push("--dry-run".to_string());
     }
 
-    let command_line = CommandLine("helm".to_string(), args);
+    let command_line = CommandLine(helm_path(), args);
     let result = command_line.run().await;
     let has_errors = result.is_err();
     let command = if dry_run {
@@ -460,7 +468,7 @@ async fn outdated_helm_chart(
         format!("{}/{chart_name}", repo.name),
     ];
 
-    let command_line = CommandLine("helm".to_string(), args);
+    let command_line = CommandLine(helm_path(), args);
     let result = command_line.run().await;
     let has_errors = result.is_err();
 
@@ -531,7 +539,7 @@ async fn outdated_oci_chart(
         format!("{}/{chart_name}", url.path().trim_start_matches('/')),
     ];
 
-    let command_line = CommandLine("aws".to_string(), args);
+    let command_line = CommandLine(aws_path(), args);
     let result = command_line.run().await;
     let has_errors = result.is_err();
 

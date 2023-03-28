@@ -2,3 +2,6 @@
 /target
 /backup
 /overrides.yaml
+/result
+/result-bin
+/.direnv
