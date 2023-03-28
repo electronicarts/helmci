@@ -7,6 +7,7 @@ use anyhow::Result;
 use semver::Version;
 use serde::Deserialize;
 use std::{
+    ffi::OsString,
     fmt::{Debug, Display},
     path::PathBuf,
     sync::Arc,
@@ -19,7 +20,6 @@ use crate::{
     command::{CommandLine, CommandResult, CommandSuccess},
     config::{AnnouncePolicy, ReleaseReference},
     output::{Message, MultiOutput},
-    utils::path_to_string,
 };
 
 /// A reference to a Helm Repo.
@@ -45,12 +45,12 @@ pub enum HelmChart {
     },
 }
 
-fn helm_path() -> String {
-    std::env::var("HELM_PATH").unwrap_or_else(|_| "helm".to_string())
+fn helm_path() -> OsString {
+    std::env::var_os("HELM_PATH").unwrap_or_else(|| "helm".into())
 }
 
-fn aws_path() -> String {
-    std::env::var("AWS_PATH").unwrap_or_else(|_| "aws".to_string())
+fn aws_path() -> OsString {
+    std::env::var_os("AWS_PATH").unwrap_or_else(|| "aws".into())
 }
 
 /// A unique identifier for an installation.
@@ -178,13 +178,13 @@ pub async fn add_repo(
     debug!("Add helm repo {} at {}... ", repo_name, repo_url);
 
     let command: CommandLine = CommandLine(
-        "helm".to_string(),
+        "helm".into(),
         vec![
-            "repo".to_string(),
-            "add".to_string(),
-            "--force-update".to_string(),
-            repo_name.clone(),
-            repo_url.clone(),
+            "repo".into(),
+            "add".into(),
+            "--force-update".into(),
+            repo_name.into(),
+            repo_url.into(),
         ],
     );
 
@@ -209,8 +209,8 @@ pub async fn remove_repo(
     debug!("Remove helm repo {} at {}... ", repo_name, repo_url);
 
     let command: CommandLine = CommandLine(
-        "helm".to_string(),
-        vec!["repo".to_string(), "remove".to_string(), repo_name.clone()],
+        "helm".into(),
+        vec!["repo".into(), "remove".into(), repo_name.into()],
     );
 
     let result = command.run().await;
@@ -228,19 +228,19 @@ pub async fn remove_repo(
 pub async fn lint(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<()> {
     if let HelmChart::Dir(dir) = &installation.chart {
         let mut args = vec![
-            "lint".to_string(),
-            "--namespace".to_string(),
-            installation.namespace.clone(),
-            "--kube-context".to_string(),
-            installation.context.clone(),
+            "lint".into(),
+            "--namespace".into(),
+            installation.namespace.clone().into(),
+            "--kube-context".into(),
+            installation.context.clone().into(),
         ];
 
         for values in &installation.values_files {
-            args.push("-f".to_string());
-            args.push(path_to_string(values)?);
+            args.push("-f".into());
+            args.push(values.clone().into_os_string());
         }
 
-        args.push(path_to_string(dir)?);
+        args.push(dir.clone().into_os_string());
         args.append(&mut get_template_parameters(installation));
 
         let command_line = CommandLine(helm_path(), args);
@@ -261,58 +261,64 @@ pub async fn lint(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<
 }
 
 /// Get the template parameters for a chart.
-fn get_template_parameters(installation: &Installation) -> Vec<String> {
+fn get_template_parameters(installation: &Installation) -> Vec<OsString> {
     vec![
-        format!("--set=global.namespace={}", installation.namespace),
-        format!("--set=global.context={}", installation.context),
-        format!("--set=global.env_name={}", installation.env_name),
-        format!("--set=global.cluster_name={}", installation.cluster_name),
+        format!("--set=global.namespace={}", installation.namespace).into(),
+        format!("--set=global.context={}", installation.context).into(),
+        format!("--set=global.env_name={}", installation.env_name).into(),
+        format!("--set=global.cluster_name={}", installation.cluster_name).into(),
     ]
 }
 
 /// Get the required helm arguments for this chart.
-fn get_args_from_chart(chart: &HelmChart) -> Result<(String, Vec<String>)> {
+fn get_args_from_chart(chart: &HelmChart) -> (OsString, Vec<OsString>) {
     let (chart_name, version) = match &chart {
-        HelmChart::Dir(dir) => (path_to_string(dir)?, None),
+        HelmChart::Dir(dir) => (dir.clone().into_os_string(), None),
         HelmChart::HelmRepo {
             repo,
             chart_name,
             chart_version,
-        } => (format!("{}/{chart_name}", repo.name), Some(chart_version)),
+        } => (
+            format!("{}/{chart_name}", repo.name).into(),
+            Some(chart_version),
+        ),
         HelmChart::OciRepo {
             repo_url,
             chart_name,
             chart_version,
-        } => (format!("{repo_url}/{chart_name}"), Some(chart_version)),
+        } => (
+            format!("{repo_url}/{chart_name}").into(),
+            Some(chart_version),
+        ),
     };
 
     let mut args = vec![];
     if let Some(version) = version {
-        args.push("--version".to_string());
-        args.push(version.clone());
+        args.push("--version".into());
+        args.push(version.into());
     }
 
-    Ok((chart_name, args))
+    (chart_name, args)
 }
 
 /// Run the helm template command.
 pub async fn template(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<()> {
-    let (chart, mut chart_args) = get_args_from_chart(&installation.chart)?;
+    let (chart, mut chart_args) = get_args_from_chart(&installation.chart);
 
     let mut args = vec![
-        "template".to_string(),
-        installation.name.clone(),
+        "template".into(),
+        installation.name.clone().into(),
         chart,
-        "--is-upgrade".to_string(),
-        "--namespace".to_string(),
-        installation.namespace.clone(),
-        "--kube-context".to_string(),
-        installation.context.clone(),
+        "--is-upgrade".into(),
+        "--namespace".into(),
+        installation.namespace.clone().into(),
+        "--kube-context".into(),
+        installation.context.clone().into(),
     ];
 
     for values in &installation.values_files {
-        args.push("-f".to_string());
-        args.push(path_to_string(values)?);
+        args.push("-f".into());
+        args.push(values.clone().into_os_string());
     }
 
     args.append(&mut chart_args);
@@ -334,25 +340,25 @@ pub async fn template(installation: &Arc<Installation>, tx: &MultiOutput) -> Res
 
 /// Run the helm diff command.
 pub async fn diff(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<()> {
-    let (chart, mut chart_args) = get_args_from_chart(&installation.chart)?;
+    let (chart, mut chart_args) = get_args_from_chart(&installation.chart);
 
     let mut args = vec![
-        "diff".to_string(),
-        "upgrade".to_string(),
-        installation.name.clone(),
+        "diff".into(),
+        "upgrade".into(),
+        installation.name.clone().into(),
         chart,
-        "--context=3".to_string(),
-        "--no-color".to_string(),
-        "--allow-unreleased".to_string(),
-        "--namespace".to_string(),
-        installation.namespace.clone(),
-        "--kube-context".to_string(),
-        installation.context.clone(),
+        "--context=3".into(),
+        "--no-color".into(),
+        "--allow-unreleased".into(),
+        "--namespace".into(),
+        installation.namespace.clone().into(),
+        "--kube-context".into(),
+        installation.clone().context.clone().into(),
     ];
 
     for values in &installation.values_files {
-        args.push("-f".to_string());
-        args.push(path_to_string(values)?);
+        args.push("-f".into());
+        args.push(values.clone().into_os_string());
     }
 
     args.append(&mut chart_args);
@@ -378,32 +384,32 @@ pub async fn upgrade(
     tx: &MultiOutput,
     dry_run: bool,
 ) -> Result<()> {
-    let (chart, mut chart_args) = get_args_from_chart(&installation.chart)?;
+    let (chart, mut chart_args) = get_args_from_chart(&installation.chart);
 
     let mut args = vec![
-        "upgrade".to_string(),
-        installation.name.clone(),
+        "upgrade".into(),
+        installation.name.clone().into(),
         chart,
-        "--install".to_string(),
-        "--wait".to_string(),
-        "--timeout".to_string(),
-        format!("{}s", installation.timeout),
-        "--namespace".to_string(),
-        installation.namespace.clone(),
-        "--kube-context".to_string(),
-        installation.context.clone(),
+        "--install".into(),
+        "--wait".into(),
+        "--timeout".into(),
+        format!("{}s", installation.timeout).into(),
+        "--namespace".into(),
+        installation.namespace.clone().into(),
+        "--kube-context".into(),
+        installation.context.clone().into(),
     ];
 
     for values in &installation.values_files {
-        args.push("-f".to_string());
-        args.push(path_to_string(values)?);
+        args.push("-f".into());
+        args.push(values.clone().into_os_string());
     }
 
     args.append(&mut chart_args);
     args.append(&mut get_template_parameters(installation));
 
     if dry_run {
-        args.push("--dry-run".to_string());
+        args.push("--dry-run".into());
     }
 
     let command_line = CommandLine(helm_path(), args);
@@ -462,10 +468,10 @@ async fn outdated_helm_chart(
     tx: &MultiOutput,
 ) -> Result<()> {
     let args = vec![
-        "search".to_string(),
-        "repo".to_string(),
-        "-o=json".to_string(),
-        format!("{}/{chart_name}", repo.name),
+        "search".into(),
+        "repo".into(),
+        "-o=json".into(),
+        format!("{}/{chart_name}", repo.name).into(),
     ];
 
     let command_line = CommandLine(helm_path(), args);
@@ -532,11 +538,11 @@ async fn outdated_oci_chart(
     let url = Url::parse(repo_url)?;
 
     let args = vec![
-        "ecr".to_string(),
-        "describe-images".to_string(),
-        "--region=us-east-2".to_string(),
-        "--repository-name".to_string(),
-        format!("{}/{chart_name}", url.path().trim_start_matches('/')),
+        "ecr".into(),
+        "describe-images".into(),
+        "--region=us-east-2".into(),
+        "--repository-name".into(),
+        format!("{}/{chart_name}", url.path().trim_start_matches('/')).into(),
     ];
 
     let command_line = CommandLine(aws_path(), args);

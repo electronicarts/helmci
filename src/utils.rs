@@ -34,11 +34,6 @@ impl From<UnicodeError> for FilenameError {
     }
 }
 
-pub fn path_to_string(path: &Path) -> Result<String, FilenameError> {
-    let result = path.to_str().ok_or(UnicodeError {})?.to_string();
-    Ok(result)
-}
-
 pub fn filename_to_string(path: &Path) -> Result<String, FilenameError> {
     let result = path
         .file_name()

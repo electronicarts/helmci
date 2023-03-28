@@ -6,6 +6,7 @@
 
 use std::{
     error::Error,
+    ffi::OsString,
     fmt::Display,
     process::{Output, Stdio},
     str::{self, Utf8Error},
@@ -124,7 +125,7 @@ impl Error for CommandError {}
 pub type CommandResult = Result<CommandSuccess, CommandError>;
 
 #[derive(Clone, Eq, PartialEq)]
-pub struct CommandLine(pub String, pub Vec<String>);
+pub struct CommandLine(pub OsString, pub Vec<OsString>);
 
 fn get_exit_code(output: &Result<Output, io::Error>) -> i32 {
     output
@@ -204,9 +205,9 @@ impl CommandLine {
 
 impl Display for CommandLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)?;
+        write!(f, "{}", self.0.to_string_lossy())?;
         for arg in &self.1 {
-            write!(f, " {arg}")?;
+            write!(f, " {}", arg.to_string_lossy())?;
         }
         Ok(())
     }
@@ -214,9 +215,9 @@ impl Display for CommandLine {
 
 impl std::fmt::Debug for CommandLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "CommandLine(\"{}", self.0)?;
+        write!(f, "CommandLine(\"{:?}", self.0)?;
         for arg in &self.1 {
-            write!(f, " {arg}")?;
+            write!(f, " {arg:?}")?;
         }
         write!(f, "\")")?;
         Ok(())
