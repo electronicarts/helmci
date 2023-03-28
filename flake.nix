@@ -50,6 +50,7 @@
       in rec {
         packages = {
           # replace hello-world with your package name
+          helm = helm;
           helmci = wrapper;
           default = packages.helmci;
         };
