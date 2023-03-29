@@ -40,6 +40,7 @@
         wrapper = pkgs.writeShellScriptBin "helmci" ''
           export HELM_PATH=${helm}/bin/helm
           export AWS_PATH=${pkgs.awscli}/bin/aws
+          export HELM_SECRETS_SOPS_PATH=${pkgs.sops}/bin/sops
           export HELM_SECRETS_VALS_PATH=${pkgs.vals}/bin/vals
           exec ${bin}/bin/helmci "$@"
         '';
@@ -49,7 +50,7 @@
         workspaceShell = rustPkgs.workspaceShell {
           # This adds cargo2nix to the project shell via the cargo2nix flake
           packages =
-            [ cargo2nix.packages."${system}".cargo2nix helm pkgs.awscli ];
+            [ cargo2nix.packages."${system}".cargo2nix helm pkgs.awscli pkgs.sops pkgs.vals ];
         };
 
       in rec {
