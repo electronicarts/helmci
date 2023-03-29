@@ -36,12 +36,18 @@
             (pkgs.callPackage ./helm-secrets.nix {})
           ];
         };
+        awscli = pkgs.awscli;
+        sops = pkgs.sops;
+        vals = pkgs.vals;
+        gnupg = pkgs.gnupg;
+
         bin = (rustPkgs.workspace.helmci { }).bin;
         wrapper = pkgs.writeShellScriptBin "helmci" ''
           export HELM_PATH=${helm}/bin/helm
-          export AWS_PATH=${pkgs.awscli}/bin/aws
-          export HELM_SECRETS_SOPS_PATH=${pkgs.sops}/bin/sops
-          export HELM_SECRETS_VALS_PATH=${pkgs.vals}/bin/vals
+          export AWS_PATH=${awscli}/bin/aws
+          export HELM_SECRETS_SOPS_PATH=${sops}/bin/sops
+          export HELM_SECRETS_VALS_PATH=${vals}/bin/vals
+          export SOPS_GPG_EXEC=${gnupg}/bin/gpg
           exec ${bin}/bin/helmci "$@"
         '';
 
@@ -50,15 +56,22 @@
         workspaceShell = rustPkgs.workspaceShell {
           # This adds cargo2nix to the project shell via the cargo2nix flake
           packages =
-            [ cargo2nix.packages."${system}".cargo2nix helm pkgs.awscli pkgs.sops pkgs.vals ];
+            [ cargo2nix.packages."${system}".cargo2nix helm awscli sops vals gnupg ];
         };
 
       in rec {
         packages = {
-          # replace hello-world with your package name
-          helm = helm;
+          inherit helm awscli sops vals gnupg;
           helmci = wrapper;
-          default = packages.helmci;
+          default = pkgs.runCommand "helmci-all" {} ''
+            mkdir -p $out/bin
+            ln -s ${wrapper}/bin/helmci $out/bin/helmci
+            ln -s ${helm}/bin/helm $out/bin/helm
+            ln -s ${awscli}/bin/aws $out/bin/aws
+            ln -s ${sops}/bin/sops $out/bin/sops
+            ln -s ${vals}/bin/vals $out/bin/vals
+            ln -s ${gnupg}/bin/gpg $out/bin/gpg
+          '';
         };
         devShell = workspaceShell;
       });
