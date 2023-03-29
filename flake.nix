@@ -3,13 +3,13 @@
 
   inputs = {
     rust-overlay.url = "github:oxalica/rust-overlay";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     cargo2nix = {
       url = "github:cargo2nix/cargo2nix/unstable";
       inputs.rust-overlay.follows = "rust-overlay";
     };
     flake-utils.follows = "cargo2nix/flake-utils";
-    nixpkgs.follows = "cargo2nix/nixpkgs";
   };
 
   outputs = inputs:
@@ -30,12 +30,17 @@
 
         # Define wrapper
         helm = pkgs.wrapHelm pkgs.kubernetes-helm {
-          plugins = [ pkgs.kubernetes-helmPlugins.helm-diff ];
+          plugins = [
+            pkgs.kubernetes-helmPlugins.helm-diff
+            # pkgs.kubernetes-helmPlugins.helm-secrets
+            (pkgs.callPackage ./helm-secrets.nix {})
+          ];
         };
         bin = (rustPkgs.workspace.helmci { }).bin;
         wrapper = pkgs.writeShellScriptBin "helmci" ''
           export HELM_PATH=${helm}/bin/helm
           export AWS_PATH=${pkgs.awscli}/bin/aws
+          export HELM_SECRETS_VALS_PATH=${pkgs.vals}/bin/vals
           exec ${bin}/bin/helmci "$@"
         '';
 

@@ -56,6 +56,19 @@ fn aws_path() -> OsString {
 /// A unique identifier for an installation.
 pub type InstallationId = u16;
 
+#[derive(Debug)]
+pub enum ValuesFormat {
+    PlainText,
+    Vals,
+    Sops,
+}
+
+#[derive(Debug)]
+pub struct ValuesFile {
+    pub path: PathBuf,
+    pub format: ValuesFormat,
+}
+
 /// All the information required for an helm release to be processed.
 #[derive(Debug)]
 pub struct Installation {
@@ -64,7 +77,7 @@ pub struct Installation {
     pub env_name: String,
     pub cluster_name: String,
     pub context: String,
-    pub values_files: Vec<PathBuf>,
+    pub values_files: Vec<ValuesFile>,
     pub chart: HelmChart,
     pub depends: Vec<ReleaseReference>,
     pub timeout: u16,
@@ -235,11 +248,7 @@ pub async fn lint(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<
             installation.context.clone().into(),
         ];
 
-        for values in &installation.values_files {
-            args.push("-f".into());
-            args.push(values.clone().into_os_string());
-        }
-
+        args.append(&mut add_values_files(installation));
         args.push(dir.clone().into_os_string());
         args.append(&mut get_template_parameters(installation));
 
@@ -258,6 +267,32 @@ pub async fn lint(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<
     } else {
         Ok(())
     }
+}
+
+fn add_values_files(installation: &Arc<Installation>) -> Vec<OsString> {
+    let mut args = Vec::new();
+
+    for values in &installation.values_files {
+        args.push("-f".into());
+
+        let file = match values.format {
+            ValuesFormat::PlainText => values.path.clone().into_os_string(),
+            ValuesFormat::Vals => {
+                let mut osstr: OsString = "secrets://vals!".into();
+                osstr.push(values.path.as_os_str());
+                osstr
+            }
+            ValuesFormat::Sops => {
+                let mut osstr: OsString = "secrets://sops!".into();
+                osstr.push(values.path.as_os_str());
+                osstr
+            }
+        };
+
+        args.push(file);
+    }
+
+    args
 }
 
 /// Get the template parameters for a chart.
@@ -316,11 +351,7 @@ pub async fn template(installation: &Arc<Installation>, tx: &MultiOutput) -> Res
         installation.context.clone().into(),
     ];
 
-    for values in &installation.values_files {
-        args.push("-f".into());
-        args.push(values.clone().into_os_string());
-    }
-
+    args.append(&mut add_values_files(installation));
     args.append(&mut chart_args);
     args.append(&mut get_template_parameters(installation));
 
@@ -356,11 +387,7 @@ pub async fn diff(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<
         installation.clone().context.clone().into(),
     ];
 
-    for values in &installation.values_files {
-        args.push("-f".into());
-        args.push(values.clone().into_os_string());
-    }
-
+    args.append(&mut add_values_files(installation));
     args.append(&mut chart_args);
     args.append(&mut get_template_parameters(installation));
 
@@ -400,11 +427,7 @@ pub async fn upgrade(
         installation.context.clone().into(),
     ];
 
-    for values in &installation.values_files {
-        args.push("-f".into());
-        args.push(values.clone().into_os_string());
-    }
-
+    args.append(&mut add_values_files(installation));
     args.append(&mut chart_args);
     args.append(&mut get_template_parameters(installation));
 

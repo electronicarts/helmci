@@ -34,7 +34,7 @@ use tracing_subscriber::{Layer, Registry};
 mod command;
 
 mod helm;
-use helm::{HelmChart, Installation};
+use helm::{HelmChart, Installation, ValuesFile, ValuesFormat};
 use helm::{HelmRepo, InstallationId};
 
 mod depends;
@@ -510,14 +510,28 @@ fn create_installation(
 ) -> Installation {
     let depends = release.config.depends.unwrap_or_default();
 
-    let mut values_files: Vec<PathBuf> = vec![];
+    let mut values_files: Vec<ValuesFile> = vec![];
     let values_file = release.dir.join("values.yaml");
     if values_file.is_file() {
-        values_files.push(values_file);
+        values_files.push(ValuesFile {
+            path: values_file,
+            format: ValuesFormat::PlainText,
+        });
     }
     let secrets_file = release.dir.join("values.secrets");
     if secrets_file.is_file() {
-        values_files.push(secrets_file);
+        values_files.push(ValuesFile {
+            path: secrets_file,
+            format: ValuesFormat::PlainText,
+        });
+    }
+
+    let encrypted_file = release.dir.join("secrets.yaml");
+    if encrypted_file.is_file() {
+        values_files.push(ValuesFile {
+            path: encrypted_file,
+            format: ValuesFormat::Vals,
+        });
     }
 
     // Turn legacy config into new config
