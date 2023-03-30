@@ -278,14 +278,14 @@ fn add_values_files(installation: &Arc<Installation>) -> Vec<OsString> {
         let file = match values.format {
             ValuesFormat::PlainText => values.path.clone().into_os_string(),
             ValuesFormat::Vals => {
-                let mut osstr: OsString = "secrets://vals!".into();
-                osstr.push(values.path.as_os_str());
-                osstr
+                let mut str: OsString = "secrets://vals!".into();
+                str.push(values.path.as_os_str());
+                str
             }
             ValuesFormat::Sops => {
-                let mut osstr: OsString = "secrets://sops!".into();
-                osstr.push(values.path.as_os_str());
-                osstr
+                let mut str: OsString = "secrets://sops!".into();
+                str.push(values.path.as_os_str());
+                str
             }
         };
 

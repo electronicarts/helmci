@@ -5,16 +5,22 @@
         "brianmay",
         "Buildx",
         "chrono",
+        "cinc",
         "Clippy",
         "COLOR",
         "crossterm",
+        "dependancies",
         "Dwarnings",
         "electronicarts",
         "helmci",
         "Ksection",
+        "oneshot",
         "refs",
+        "requestor",
         "sqlpad",
         "Swatinem",
+        "unconfigure",
+        "Vals",
         "vdir"
     ]
 }

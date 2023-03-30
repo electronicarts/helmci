@@ -1,6 +1,6 @@
 // Copyright (C) 2022 Electronic Arts, Inc. All rights reserved.
 
-//! The main helmci progam code
+//! The main helmci program code
 #![warn(missing_docs)]
 #![deny(clippy::pedantic)]
 #![deny(clippy::nursery)]
@@ -285,7 +285,7 @@ async fn main() -> Result<()> {
     let start = Instant::now();
     output_pipe.send(Message::Start(task, start)).await;
 
-    // Save the error for now so we can cleanup.
+    // Save the error for now so we can clean up.
     let rc = do_task(task, &args, installs, &output_pipe).await;
 
     // Log the error.
@@ -488,7 +488,7 @@ fn generate_todo(
                 }
                 seen.add(&installation);
 
-                // Note: skipped installs count towards dependancy requirements
+                // Note: skipped installs count towards dependency requirements
                 let installation = Arc::new(installation);
                 if skip {
                     skipped.push((!hide_skip, installation));
@@ -526,7 +526,15 @@ fn create_installation(
         });
     }
 
-    let encrypted_file = release.dir.join("secrets.yaml");
+    let encrypted_file = release.dir.join("secrets.sops.yaml");
+    if encrypted_file.is_file() {
+        values_files.push(ValuesFile {
+            path: encrypted_file,
+            format: ValuesFormat::Sops,
+        });
+    }
+
+    let encrypted_file = release.dir.join("secrets.vals.yaml");
     if encrypted_file.is_file() {
         values_files.push(ValuesFile {
             path: encrypted_file,
