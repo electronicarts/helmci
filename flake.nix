@@ -28,26 +28,29 @@
           extraRustComponents = [ "clippy" "rustfmt" ];
         };
 
-        # Define wrapper
+        awscli = pkgs.awscli;
+        vals = pkgs.vals;
+        gnupg = pkgs.gnupg;
+
+        sops = pkgs.writeShellScriptBin "sops" ''
+          export SOPS_GPG_EXEC=${gnupg}/bin/gpg
+          exec ${pkgs.sops}/bin/sops "$@"
+        '';
+
         helm = pkgs.wrapHelm pkgs.kubernetes-helm {
           plugins = [
             pkgs.kubernetes-helmPlugins.helm-diff
             # pkgs.kubernetes-helmPlugins.helm-secrets
             (pkgs.callPackage ./helm-secrets.nix {})
           ];
+          extraMakeWrapperArgs =
+            "--set HELM_SECRETS_SOPS_PATH ${sops}/bin/sops --set HELM_SECRETS_VALS_PATH ${vals}/bin/vals";
         };
-        awscli = pkgs.awscli;
-        sops = pkgs.sops;
-        vals = pkgs.vals;
-        gnupg = pkgs.gnupg;
 
         bin = (rustPkgs.workspace.helmci { }).bin;
-        wrapper = pkgs.writeShellScriptBin "helmci" ''
+        helmci = pkgs.writeShellScriptBin "helmci" ''
           export HELM_PATH=${helm}/bin/helm
           export AWS_PATH=${awscli}/bin/aws
-          export HELM_SECRETS_SOPS_PATH=${sops}/bin/sops
-          export HELM_SECRETS_VALS_PATH=${vals}/bin/vals
-          export SOPS_GPG_EXEC=${gnupg}/bin/gpg
           exec ${bin}/bin/helmci "$@"
         '';
 
@@ -61,11 +64,10 @@
 
       in rec {
         packages = {
-          inherit helm awscli sops vals gnupg;
-          helmci = wrapper;
+          inherit helmci helm awscli sops vals gnupg;
           default = pkgs.runCommand "helmci-all" {} ''
             mkdir -p $out/bin
-            ln -s ${wrapper}/bin/helmci $out/bin/helmci
+            ln -s ${helmci}/bin/helmci $out/bin/helmci
             ln -s ${helm}/bin/helm $out/bin/helm
             ln -s ${awscli}/bin/aws $out/bin/aws
             ln -s ${sops}/bin/sops $out/bin/sops
