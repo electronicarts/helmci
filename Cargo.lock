@@ -602,7 +602,7 @@ dependencies = [
  "crossterm 0.26.1",
  "futures",
  "hyper",
- "hyper-rustls 0.23.2",
+ "hyper-rustls",
  "lazy_static",
  "log",
  "semver",
@@ -695,21 +695,6 @@ dependencies = [
  "tower-service",
  "tracing",
  "want",
-]
-
-[[package]]
-name = "hyper-rustls"
-version = "0.23.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1788965e61b367cd03a62950836d5cd41560c3577d90e40e0819373194d1661c"
-dependencies = [
- "http",
- "hyper",
- "log",
- "rustls 0.20.7",
- "rustls-native-certs",
- "tokio",
- "tokio-rustls 0.23.4",
 ]
 
 [[package]]
@@ -1463,7 +1448,7 @@ dependencies = [
  "hex",
  "http",
  "hyper",
- "hyper-rustls 0.24.0",
+ "hyper-rustls",
  "lazy_static",
  "mime",
  "rand",
