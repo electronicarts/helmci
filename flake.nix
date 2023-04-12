@@ -41,7 +41,7 @@
           plugins = [
             pkgs.kubernetes-helmPlugins.helm-diff
             # pkgs.kubernetes-helmPlugins.helm-secrets
-            (pkgs.callPackage ./helm-secrets.nix {})
+            (pkgs.callPackage ./helm-secrets.nix { })
           ];
           extraMakeWrapperArgs =
             "--set HELM_SECRETS_SOPS_PATH ${sops}/bin/sops --set HELM_SECRETS_VALS_PATH ${vals}/bin/vals";
@@ -58,14 +58,20 @@
         # and environment settings necessary for a regular `cargo build`
         workspaceShell = rustPkgs.workspaceShell {
           # This adds cargo2nix to the project shell via the cargo2nix flake
-          packages =
-            [ cargo2nix.packages."${system}".cargo2nix helm awscli sops vals gnupg ];
+          packages = [
+            cargo2nix.packages."${system}".cargo2nix
+            helm
+            awscli
+            sops
+            vals
+            gnupg
+          ];
         };
 
       in rec {
         packages = {
           inherit helmci helm awscli sops vals gnupg;
-          default = pkgs.runCommand "helmci-all" {} ''
+          default = pkgs.runCommand "helmci-all" { } ''
             mkdir -p $out/bin
             ln -s ${helmci}/bin/helmci $out/bin/helmci
             ln -s ${helm}/bin/helm $out/bin/helm
