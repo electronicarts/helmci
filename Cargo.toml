@@ -10,7 +10,7 @@ anyhow = "1.0"
 clap = { version = "4.2.2", features = ["derive"] }
 serde = { version = "1.0.160", features = ["derive"] }
 serde_yaml = "0.9.21"
-serde_json = "1.0.95"
+serde_json = "1.0.96"
 log = { version = "0.4.14", features = ["std"] }
 lazy_static = "1.4.0"
 tui = "0.19.0"
