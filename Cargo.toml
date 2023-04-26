@@ -22,7 +22,7 @@ chrono = "0.4.24"
 hyper-rustls = "0.24.0"
 hyper = "0.14.26"
 async-trait = "0.1.68"
-tracing = "0.1.5"
+tracing = "0.1.38"
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 semver = "1.0.17"
 url = "2.2.2"
