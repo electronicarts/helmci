@@ -14,12 +14,12 @@ use std::fmt::Display;
 use std::fmt::Write;
 use std::sync::Arc;
 use std::time::Duration;
-use tabled::object::Columns;
-use tabled::object::Rows;
-use tabled::Alignment;
-use tabled::ModifyObject;
-use tabled::Padding;
-use tabled::Style;
+use tabled::settings::object::Columns;
+use tabled::settings::object::Rows;
+use tabled::settings::Alignment;
+use tabled::settings::Modify;
+use tabled::settings::Padding;
+use tabled::settings::Style;
 use tabled::Table;
 use tabled::Tabled;
 use tokio;
@@ -131,13 +131,9 @@ fn results_to_string(state: &State) -> String {
 
     Table::new(data)
         .with(Style::markdown())
-        .with(Rows::new(..).modify().with(Alignment::left()))
-        .with(Columns::first().modify().with(Alignment::center()))
-        .with(
-            Rows::last()
-                .modify()
-                .with(Padding::new(1, 1, 1, 0).set_fill(' ', ' ', '-', ' ')),
-        )
+        .with(Modify::new(Rows::new(..)).with(Alignment::left()))
+        .with(Modify::new(Columns::first()).with(Alignment::center()))
+        .with(Modify::new(Rows::last()).with(Padding::new(1, 1, 1, 0).fill(' ', ' ', '-', ' ')))
         .to_string()
 }
 
@@ -180,7 +176,7 @@ fn versions_to_string(state: &State) -> String {
 
     Table::new(data)
         .with(Style::markdown())
-        .with(Rows::new(..).modify().with(Alignment::left()))
+        .with(Modify::new(Rows::new(..)).with(Alignment::left()))
         .to_string()
 }
 
