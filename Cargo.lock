@@ -322,12 +322,12 @@ dependencies = [
 
 [[package]]
 name = "ctrlc"
-version = "3.2.5"
+version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbcf33c2a618cbe41ee43ae6e9f2e48368cd9f9db2896f10167d8d762679f639"
+checksum = "2a011bbe2c35ce9c1f143b7af6f94f29a167beb4cd1d29e6740ce836f723120e"
 dependencies = [
  "nix",
- "windows-sys 0.45.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -1442,9 +1442,9 @@ dependencies = [
 
 [[package]]
 name = "slack-morphism"
-version = "1.11.0"
+version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe8092e83c73f4f40709efe2aa1c23452f53453c0300b7fb7088e6f99b9be9b1"
+checksum = "48ae1450a14bf7a4588b25fdee8668d94eb69f079581ddaf48a1a767befd2e9e"
 dependencies = [
  "async-recursion",
  "async-trait",
