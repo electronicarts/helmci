@@ -3,10 +3,10 @@
 
   inputs = {
     rust-overlay.url = "github:oxalica/rust-overlay";
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
 
     cargo2nix = {
-      url = "github:cargo2nix/cargo2nix/unstable";
+      url = "github:cargo2nix/cargo2nix/release-0.11.0";
       inputs.rust-overlay.follows = "rust-overlay";
     };
     flake-utils.follows = "cargo2nix/flake-utils";
@@ -23,7 +23,7 @@
 
         # create the workspace & dependencies package set
         rustPkgs = pkgs.rustBuilder.makePackageSet {
-          rustVersion = "1.68.1";
+          rustVersion = "1.70.0";
           packageFun = import ./Cargo.nix;
           extraRustComponents = [ "clippy" "rustfmt" ];
         };
@@ -40,8 +40,7 @@
         helm = pkgs.wrapHelm pkgs.kubernetes-helm {
           plugins = [
             pkgs.kubernetes-helmPlugins.helm-diff
-            # pkgs.kubernetes-helmPlugins.helm-secrets
-            (pkgs.callPackage ./helm-secrets.nix { })
+            pkgs.kubernetes-helmPlugins.helm-secrets
           ];
           extraMakeWrapperArgs =
             "--set HELM_SECRETS_SOPS_PATH ${sops}/bin/sops --set HELM_SECRETS_VALS_PATH ${vals}/bin/vals";
