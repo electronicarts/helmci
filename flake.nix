@@ -2,14 +2,13 @@
   description = "Automatic helm chart deployment to Kubernetes cluster";
 
   inputs = {
-    rust-overlay.url = "github:oxalica/rust-overlay";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
-
-    cargo2nix = {
-      url = "github:cargo2nix/cargo2nix/release-0.11.0";
-      inputs.rust-overlay.follows = "rust-overlay";
+    flake-utils.url = "github:numtide/flake-utils";
+    rust-overlay.url = "github:oxalica/rust-overlay";
+    crane = {
+      url = "github:ipetkov/crane";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
-    flake-utils.follows = "cargo2nix/flake-utils";
   };
 
   outputs = inputs:
@@ -18,14 +17,39 @@
       let
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [ cargo2nix.overlays.default ];
+          overlays = [ (import rust-overlay) ];
+        };
+
+        src = ./.;
+
+        rustPlatform = pkgs.rust-bin.stable.latest.default;
+
+        craneLib = (crane.mkLib pkgs).overrideToolchain rustPlatform;
+
+        # Build *just* the cargo dependencies, so we can reuse
+        # all of that work (e.g. via cachix) when running in CI
+        cargoArtifacts = craneLib.buildDepsOnly { inherit src; };
+
+        # Run clippy (and deny all warnings) on the crate source.
+        clippy = craneLib.cargoClippy {
+          inherit cargoArtifacts src;
+          cargoClippyExtraArgs = "-- --deny warnings";
+        };
+
+        # Next, we want to run the tests and collect code-coverage, _but only if
+        # the clippy checks pass_ so we do not waste any extra cycles.
+        coverage = craneLib.cargoTarpaulin {
+          inherit src;
+          cargoArtifacts = clippy;
         };
 
         # create the workspace & dependencies package set
-        rustPkgs = pkgs.rustBuilder.makePackageSet {
-          rustVersion = "1.70.0";
-          packageFun = import ./Cargo.nix;
-          extraRustComponents = [ "clippy" "rustfmt" ];
+        pkg = craneLib.buildPackage {
+          inherit src;
+          cargoArtifacts = clippy;
+
+          # Add extra inputs here or any other derivation settings
+          doCheck = true;
         };
 
         awscli = pkgs.awscli;
@@ -46,28 +70,21 @@
             "--set HELM_SECRETS_SOPS_PATH ${sops}/bin/sops --set HELM_SECRETS_VALS_PATH ${vals}/bin/vals";
         };
 
-        bin = (rustPkgs.workspace.helmci { }).bin;
         helmci = pkgs.writeShellScriptBin "helmci" ''
           export HELM_PATH=${helm}/bin/helm
           export AWS_PATH=${awscli}/bin/aws
-          exec ${bin}/bin/helmci "$@"
+          exec ${pkg}/bin/helmci "$@"
         '';
 
         # The workspace defines a development shell with all of the dependencies
         # and environment settings necessary for a regular `cargo build`
-        workspaceShell = rustPkgs.workspaceShell {
-          # This adds cargo2nix to the project shell via the cargo2nix flake
-          packages = [
-            cargo2nix.packages."${system}".cargo2nix
-            helm
-            awscli
-            sops
-            vals
-            gnupg
-          ];
+        workspaceShell = pkgs.mkShell {
+          buildInputs =
+            [ pkgs.rust-analyzer rustPlatform helm awscli sops vals gnupg ];
         };
 
       in rec {
+        checks = { inherit clippy coverage pkg; };
         packages = {
           inherit helmci helm awscli sops vals gnupg;
           default = pkgs.runCommand "helmci-all" { } ''
