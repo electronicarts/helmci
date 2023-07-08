@@ -97,6 +97,6 @@
             ln -s ${gnupg}/bin/gpg $out/bin/gpg
           '';
         };
-        devShell = workspaceShell;
+        devShells.default = workspaceShell;
       });
 }
