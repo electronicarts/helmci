@@ -20,6 +20,9 @@
           overlays = [ (import rust-overlay) ];
         };
 
+        osxlibs = pkgs.lib.lists.optional pkgs.stdenv.isDarwin
+          pkgs.darwin.apple_sdk.frameworks.Security;
+
         src = ./.;
 
         rustPlatform = pkgs.rust-bin.stable.latest.default;
@@ -47,6 +50,7 @@
         pkg = craneLib.buildPackage {
           inherit src;
           cargoArtifacts = clippy;
+          buildInputs = osxlibs;
 
           # Add extra inputs here or any other derivation settings
           doCheck = true;
@@ -82,7 +86,8 @@
           rustPlatform.override { extensions = [ "rust-src" ]; };
         workspaceShell = pkgs.mkShell {
           buildInputs =
-            [ pkgs.rust-analyzer rustSrcPlatform helm awscli sops vals gnupg ];
+            [ pkgs.rust-analyzer rustSrcPlatform helm awscli sops vals gnupg ]
+            ++ osxlibs;
         };
 
       in rec {
