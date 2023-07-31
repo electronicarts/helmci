@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.0](https://github.com/electronicarts/helmci/compare/v0.2.1...v0.3.0) (2023-07-31)
+
+
+### Features
+
+* Add basic helm-secrets support ([a2e687f](https://github.com/electronicarts/helmci/commit/a2e687f170488ee045f504d4c7345736988a7768))
+
+
+### Bug Fixes
+
+* Add RateLimitError support for helm results too ([12c2751](https://github.com/electronicarts/helmci/commit/12c2751f944308f7de45b2d8d8aa434e4e8b266a))
+* Loop slack update on RateLimitError ([2bd76d1](https://github.com/electronicarts/helmci/commit/2bd76d14d0c128ffd474f1e838ac3a4bccd17081))
+* Update slack code to check for rate limiting ([a50cd2f](https://github.com/electronicarts/helmci/commit/a50cd2fba05d7e589b2a54f10707b61157c22055))
+* Use OsString type for Commands ([a34f9c4](https://github.com/electronicarts/helmci/commit/a34f9c48e95fa4cc766bfd01575632491038d66c))
+
 ## [0.2.1](https://github.com/electronicarts/helmci/compare/v0.2.0...v0.2.1) (2023-02-02)
 
 
