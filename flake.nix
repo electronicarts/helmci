@@ -52,7 +52,7 @@
           doCheck = true;
         };
 
-        awscli = pkgs.awscli;
+        awscli = pkgs.awscli2;
         vals = pkgs.vals;
         gnupg = pkgs.gnupg;
 
