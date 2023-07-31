@@ -10,6 +10,7 @@ use crate::Task;
 use anyhow::Error;
 use anyhow::Result;
 use async_trait::async_trait;
+use slack_morphism::errors::SlackClientError;
 use slack_morphism::prelude::*;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -28,8 +29,10 @@ use tokio;
 use tokio::select;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
-use tokio::time::interval;
+use tokio::time::sleep_until;
 use tokio::time::Instant;
+
+const DEFAULT_RETRY: Duration = Duration::from_secs(5);
 
 pub struct SlackOutput {
     thread: Option<JoinHandle<()>>,
@@ -221,7 +224,7 @@ impl SlackState {
         })
     }
 
-    async fn update_slack(&mut self, state: &State) -> Result<()> {
+    async fn update_slack(&mut self, state: &State) -> Result<(), SlackClientError> {
         if state.task.is_none() {
             return Ok(());
         }
@@ -260,7 +263,7 @@ impl SlackState {
         Ok(())
     }
 
-    async fn send_finished(&self, state: &State) -> Result<()> {
+    async fn send_finished(&self, state: &State) {
         #[allow(clippy::match_same_arms)]
         let data = state
             .jobs
@@ -320,13 +323,29 @@ impl SlackState {
                 self.announce_slack_channel.clone().into(),
                 content,
             );
-            session.chat_post_message(&post_chat_req).await?;
-        }
 
-        Ok(())
+            match session.chat_post_message(&post_chat_req).await {
+                Err(SlackClientError::RateLimitError(err)) => {
+                    let retry_time = Instant::now() + err.retry_after.unwrap_or(DEFAULT_RETRY);
+                    sleep_until(retry_time).await;
+                    session
+                        .chat_post_message(&post_chat_req)
+                        .await
+                        .map_or_else(|err| println!("Slack error after retry: {err}"), |_| ());
+                }
+                Err(err) => {
+                    println!("Slack error: {err}");
+                }
+                Ok(_) => {}
+            }
+        }
     }
 
-    async fn log_helm_result(&self, state: &State, hr: &crate::helm::HelmResult) -> Result<()> {
+    async fn log_helm_result(
+        &self,
+        state: &State,
+        hr: &crate::helm::HelmResult,
+    ) -> Result<(), SlackClientError> {
         let mut blocks: Vec<SlackBlock> = Vec::with_capacity(5);
 
         let title = slack_title(state);
@@ -417,16 +436,36 @@ fn slack_title(state: &State) -> String {
     format!("helmci - {task}")
 }
 
-async fn update_results(state: &State, slack: &mut SlackState, finished: bool) {
-    if let Err(err) = slack.update_slack(state).await {
-        println!("Slack error: {err}");
-    }
+async fn update_results(state: &State, slack: &mut SlackState) -> Instant {
+    let update_time = match slack.update_slack(state).await {
+        Err(SlackClientError::RateLimitError(err)) => err.retry_after.unwrap_or(DEFAULT_RETRY),
+        Err(err) => {
+            println!("Slack error: {err}");
+            DEFAULT_RETRY
+        }
+        Ok(_) => Duration::from_secs(1),
+    };
 
-    if finished {
-        if let Err(err) = slack.send_finished(state).await {
+    Instant::now() + update_time
+}
+
+async fn update_final_results(state: &State, slack: &mut SlackState) {
+    match slack.update_slack(state).await {
+        Err(SlackClientError::RateLimitError(err)) => {
+            let retry_time = Instant::now() + err.retry_after.unwrap_or(DEFAULT_RETRY);
+            sleep_until(retry_time).await;
+            slack
+                .update_slack(state)
+                .await
+                .unwrap_or_else(|err| println!("Slack error after retry: {err}"));
+        }
+        Err(err) => {
             println!("Slack error: {err}");
         }
+        Ok(_) => {}
     }
+
+    slack.send_finished(state).await;
 }
 
 async fn process_message(msg: &Arc<Message>, state: &mut State, slack: &SlackState) {
@@ -513,11 +552,11 @@ pub fn start() -> Result<(SlackOutput, Sender)> {
         };
 
         // Slack will rate limit us if we send too many messages, so we need to throttle.
-        let mut interval = interval(Duration::from_secs(5));
+        let mut poll = Instant::now() + Duration::from_secs(1);
         loop {
             select! {
-                _ = interval.tick() => {
-                    update_results(&state, &mut slack_state, false).await;
+                _ = sleep_until(poll) => {
+                    poll = update_results(&state, &mut slack_state).await;
                 },
 
                 msg = rx.recv() => {
@@ -536,7 +575,7 @@ pub fn start() -> Result<(SlackOutput, Sender)> {
                 }
             }
         }
-        update_results(&state, &mut slack_state, true).await;
+        update_final_results(&state, &mut slack_state).await;
     });
 
     Ok((
