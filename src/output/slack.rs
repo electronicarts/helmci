@@ -33,6 +33,7 @@ use tokio::time::sleep_until;
 use tokio::time::Instant;
 
 const DEFAULT_RETRY: Duration = Duration::from_secs(5);
+const MAX_TRIES: u32 = 3;
 
 pub struct SlackOutput {
     thread: Option<JoinHandle<()>>,
@@ -324,19 +325,26 @@ impl SlackState {
                 content,
             );
 
-            match session.chat_post_message(&post_chat_req).await {
-                Err(SlackClientError::RateLimitError(err)) => {
-                    let retry_time = Instant::now() + err.retry_after.unwrap_or(DEFAULT_RETRY);
-                    sleep_until(retry_time).await;
-                    session
-                        .chat_post_message(&post_chat_req)
-                        .await
-                        .map_or_else(|err| println!("Slack error after retry: {err}"), |_| ());
+            let mut count = 0u32;
+            loop {
+                count += 1;
+                match session.chat_post_message(&post_chat_req).await {
+                    Err(SlackClientError::RateLimitError(err)) => {
+                        let retry_time = Instant::now() + err.retry_after.unwrap_or(DEFAULT_RETRY);
+                        sleep_until(retry_time).await;
+                        if count >= MAX_TRIES {
+                            println!("Too many retries updating slack: {err}");
+                            break;
+                        };
+                    }
+                    Err(err) => {
+                        println!("Slack error: {err}");
+                        break;
+                    }
+                    Ok(_) => {
+                        break;
+                    }
                 }
-                Err(err) => {
-                    println!("Slack error: {err}");
-                }
-                Ok(_) => {}
             }
         }
     }
@@ -450,19 +458,26 @@ async fn update_results(state: &State, slack: &mut SlackState) -> Instant {
 }
 
 async fn update_final_results(state: &State, slack: &mut SlackState) {
-    match slack.update_slack(state).await {
-        Err(SlackClientError::RateLimitError(err)) => {
-            let retry_time = Instant::now() + err.retry_after.unwrap_or(DEFAULT_RETRY);
-            sleep_until(retry_time).await;
-            slack
-                .update_slack(state)
-                .await
-                .unwrap_or_else(|err| println!("Slack error after retry: {err}"));
+    let mut count = 0u32;
+    loop {
+        count += 1;
+        match slack.update_slack(state).await {
+            Err(SlackClientError::RateLimitError(err)) => {
+                let retry_time = Instant::now() + err.retry_after.unwrap_or(DEFAULT_RETRY);
+                sleep_until(retry_time).await;
+                if count >= MAX_TRIES {
+                    println!("Too many retries updating slack: {err}");
+                    break;
+                };
+            }
+            Err(err) => {
+                println!("Slack error: {err}");
+                break;
+            }
+            Ok(_) => {
+                break;
+            }
         }
-        Err(err) => {
-            println!("Slack error: {err}");
-        }
-        Ok(_) => {}
     }
 
     slack.send_finished(state).await;
