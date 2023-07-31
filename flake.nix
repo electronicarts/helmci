@@ -78,9 +78,11 @@
 
         # The workspace defines a development shell with all of the dependencies
         # and environment settings necessary for a regular `cargo build`
+        rustSrcPlatform =
+          rustPlatform.override { extensions = [ "rust-src" ]; };
         workspaceShell = pkgs.mkShell {
           buildInputs =
-            [ pkgs.rust-analyzer rustPlatform helm awscli sops vals gnupg ];
+            [ pkgs.rust-analyzer rustSrcPlatform helm awscli sops vals gnupg ];
         };
 
       in rec {
