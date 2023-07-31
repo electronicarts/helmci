@@ -333,12 +333,12 @@ impl SlackState {
                         let retry_time = Instant::now() + err.retry_after.unwrap_or(DEFAULT_RETRY);
                         sleep_until(retry_time).await;
                         if count >= MAX_TRIES {
-                            println!("Too many retries updating slack: {err}");
+                            println!("Too many retries posting finished to slack: {err}");
                             break;
                         };
                     }
                     Err(err) => {
-                        println!("Slack error: {err}");
+                        println!("Slack error posting finished: {err}");
                         break;
                     }
                     Ok(_) => {
@@ -349,11 +349,7 @@ impl SlackState {
         }
     }
 
-    async fn log_helm_result(
-        &self,
-        state: &State,
-        hr: &crate::helm::HelmResult,
-    ) -> Result<(), SlackClientError> {
+    async fn log_helm_result(&self, state: &State, hr: &crate::helm::HelmResult) {
         let mut blocks: Vec<SlackBlock> = Vec::with_capacity(5);
 
         let title = slack_title(state);
@@ -398,8 +394,28 @@ impl SlackState {
         let session = client.open_session(&self.token);
         let post_chat_req =
             SlackApiChatPostMessageRequest::new(self.slack_channel.clone().into(), content);
-        session.chat_post_message(&post_chat_req).await?;
-        Ok(())
+
+        let mut count = 0u32;
+        loop {
+            count += 1;
+            match session.chat_post_message(&post_chat_req).await {
+                Err(SlackClientError::RateLimitError(err)) => {
+                    let retry_time = Instant::now() + err.retry_after.unwrap_or(DEFAULT_RETRY);
+                    sleep_until(retry_time).await;
+                    if count >= MAX_TRIES {
+                        println!("Too many retries posting helm result to slack: {err}");
+                        break;
+                    };
+                }
+                Err(err) => {
+                    println!("Slack error posting helm result: {err}");
+                    break;
+                }
+                Ok(_) => {
+                    break;
+                }
+            }
+        }
     }
 }
 
@@ -448,7 +464,7 @@ async fn update_results(state: &State, slack: &mut SlackState) -> Instant {
     let update_time = match slack.update_slack(state).await {
         Err(SlackClientError::RateLimitError(err)) => err.retry_after.unwrap_or(DEFAULT_RETRY),
         Err(err) => {
-            println!("Slack error: {err}");
+            println!("Slack error updating slack: {err}");
             DEFAULT_RETRY
         }
         Ok(_) => Duration::from_secs(1),
@@ -466,12 +482,12 @@ async fn update_final_results(state: &State, slack: &mut SlackState) {
                 let retry_time = Instant::now() + err.retry_after.unwrap_or(DEFAULT_RETRY);
                 sleep_until(retry_time).await;
                 if count >= MAX_TRIES {
-                    println!("Too many retries updating slack: {err}");
+                    println!("Too many retries posting final result to slack: {err}");
                     break;
                 };
             }
             Err(err) => {
-                println!("Slack error: {err}");
+                println!("Slack error posting final result: {err}");
                 break;
             }
             Ok(_) => {
@@ -487,10 +503,7 @@ async fn process_message(msg: &Arc<Message>, state: &mut State, slack: &SlackSta
     match msg.as_ref() {
         Message::InstallationResult(hr) => {
             if hr.is_err() {
-                slack
-                    .log_helm_result(state, hr)
-                    .await
-                    .unwrap_or_else(|err| println!("Slack error: {err}"));
+                slack.log_helm_result(state, hr).await;
             }
         }
         Message::Log(_entry) => {}
