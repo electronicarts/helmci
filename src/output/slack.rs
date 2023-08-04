@@ -215,12 +215,12 @@ where
                 let retry_time = Instant::now() + rle.retry_after.unwrap_or(DEFAULT_RETRY);
                 sleep_until(retry_time).await;
                 if count >= MAX_TRIES {
-                    println!("Too many retries posting finished to slack: {rle}");
+                    println!("Too many retries posting to slack: {rle}");
                     break None;
                 };
             }
             Err(err) => {
-                println!("Slack error posting finished: {err}");
+                println!("Slack error posting: {err}");
                 break None;
             }
             Ok(result) => break Some(result),
@@ -483,7 +483,7 @@ async fn update_results(state: &State, slack: &mut SlackState) -> Instant {
     let update_time = match slack.update_slack(state).await {
         Err(SlackClientError::RateLimitError(err)) => err.retry_after.unwrap_or(DEFAULT_RETRY),
         Err(err) => {
-            println!("Slack error updating slack: {err}");
+            println!("Slack error updating result: {err}");
             DEFAULT_RETRY
         }
         Ok(_) => Duration::from_secs(1),
