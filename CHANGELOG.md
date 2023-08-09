@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/electronicarts/helmci/compare/v0.3.0...v0.3.1) (2023-08-09)
+
+
+### Bug Fixes
+
+* Fix incorrect slack messages ([0a20c40](https://github.com/electronicarts/helmci/commit/0a20c40db49d6cb9d9d540b54c720fd9d171c6d7))
+* Refactor slack rate limit retrying ([b958843](https://github.com/electronicarts/helmci/commit/b958843805f42fd79ab5acd16802a2d76fd03029))
+
 ## [0.3.0](https://github.com/electronicarts/helmci/compare/v0.2.1...v0.3.0) (2023-07-31)
 
 
