@@ -95,7 +95,7 @@ fn get_required_repos(jobs: &Jobs, helm_repos: &HelmRepos) -> Vec<HelmRepo> {
 
 async fn helm_add_repos(repos: &[HelmRepo]) -> Result<()> {
     // Add these repos
-    for repo in repos.iter() {
+    for repo in repos {
         helm::add_repo(repo).await?;
     }
 
@@ -104,7 +104,7 @@ async fn helm_add_repos(repos: &[HelmRepo]) -> Result<()> {
 
 async fn helm_remove_repos_for_jobs(repos: &[HelmRepo]) -> Result<()> {
     // Add these repos
-    for repo in repos.iter() {
+    for repo in repos {
         helm::remove_repo(repo).await?;
     }
 
