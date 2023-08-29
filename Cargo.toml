@@ -18,7 +18,7 @@ crossterm = { version = "0.27.0", features = ["event-stream"] }
 tabled = "0.14.0"
 tokio = { version = "1", features = ["full"] }
 slack-morphism = { version = "1.14.2", features = ["hyper"] }
-chrono = "0.4.26"
+chrono = "0.4.27"
 hyper-rustls = "0.24.1"
 hyper = "0.14.27"
 async-trait = "0.1.73"
