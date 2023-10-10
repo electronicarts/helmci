@@ -271,7 +271,7 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
         }
         Message::FinishedJob(installation, result, duration) => {
             let status = match result {
-                Ok(_) => Status::Complete,
+                Ok(()) => Status::Complete,
                 Err(_) => Status::Failed,
             };
             state
@@ -280,7 +280,7 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
         }
         Message::FinishedAll(rc, duration) => {
             let status = match rc {
-                Ok(_) => Status::Complete,
+                Ok(()) => Status::Complete,
                 Err(_) => Status::Failed,
             };
             state.finished = Some((status, *duration));

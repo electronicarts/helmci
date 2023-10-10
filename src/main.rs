@@ -628,7 +628,6 @@ async fn run_jobs_concurrently(
     // The actual worker threads
     let threads: Vec<JoinHandle<Result<()>>> = (0..NUM_THREADS)
         .map(|_| {
-            let task = task;
             let tx_dispatch = tx_dispatch.clone();
             let output = output.clone();
             tokio::spawn(async move { worker_thread(task, &tx_dispatch, &output).await })
@@ -643,7 +642,7 @@ async fn run_jobs_concurrently(
         let rc = t.await;
 
         match rc {
-            Ok(Ok(_)) => trace!("Worker thread finished without errors"),
+            Ok(Ok(())) => trace!("Worker thread finished without errors"),
             Ok(Err(err)) => {
                 error!("Worker thread returned error: {err}");
                 errors = true;
@@ -662,7 +661,7 @@ async fn run_jobs_concurrently(
     let rc = dispatch.await;
 
     match rc {
-        Ok(Ok(_)) => {
+        Ok(Ok(())) => {
             trace!("Dispatch finished without errors");
             Ok(())
         }

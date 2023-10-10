@@ -486,7 +486,7 @@ async fn update_results(state: &State, slack: &mut SlackState) -> Instant {
             println!("Slack error updating result: {err}");
             DEFAULT_RETRY
         }
-        Ok(_) => Duration::from_secs(1),
+        Ok(()) => Duration::from_secs(1),
     };
 
     Instant::now() + update_time
@@ -533,7 +533,7 @@ async fn process_message(msg: &Arc<Message>, state: &mut State, slack: &SlackSta
         }
         Message::FinishedJob(installation, result, duration) => {
             let status = match result {
-                Ok(_) => Status::Complete,
+                Ok(()) => Status::Complete,
                 Err(_) => Status::Failed,
             };
             state
@@ -542,7 +542,7 @@ async fn process_message(msg: &Arc<Message>, state: &mut State, slack: &SlackSta
         }
         Message::FinishedAll(rc, duration) => {
             let status = match rc {
-                Ok(_) => Status::Complete,
+                Ok(()) => Status::Complete,
                 Err(_) => Status::Failed,
             };
             state.finished = Some((status, *duration));
@@ -581,7 +581,7 @@ pub fn start() -> Result<(SlackOutput, Sender)> {
         let mut poll = Instant::now() + Duration::from_secs(1);
         loop {
             select! {
-                _ = sleep_until(poll) => {
+                () = sleep_until(poll) => {
                     poll = update_results(&state, &mut slack_state).await;
                 },
 
