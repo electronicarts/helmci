@@ -49,7 +49,7 @@
         # create the workspace & dependencies package set
         pkg = craneLib.buildPackage {
           inherit src;
-          cargoArtifacts = clippy;
+          inherit cargoArtifacts;
           buildInputs = osxlibs;
 
           # Add extra inputs here or any other derivation settings
