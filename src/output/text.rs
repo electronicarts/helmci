@@ -138,16 +138,12 @@ fn results_to_string(state: &State) -> String {
 }
 
 fn to_job_result<'a>(
-    result: &(Status, Option<Instant>, Option<Duration>),
+    result: &JobStatus,
     installation: &'a Installation,
 ) -> JobResult<'a> {
-    let duration = match (result.1, result.2) {
-        (None, None) => None,
-        (_, Some(duration)) => Some(duration),
-        (Some(start_instant), None) => Some(Instant::now() - start_instant),
-    };
+    let duration = result.duration();
     JobResult {
-        status: result.0,
+        status: result.status(),
         cluster: &installation.cluster_name,
         namespace: &installation.namespace,
         release: truncate(&installation.name, 25),
@@ -246,7 +242,7 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
         Message::SkippedJob(installation) => {
             state
                 .results
-                .insert(installation.id, (Status::Skipped, None, None));
+                .insert(installation.id, JobStatus::Skipped);
             state.jobs.push(installation.clone());
         }
         Message::InstallationVersion(installation, our_version, upstream_version) => {
@@ -260,23 +256,23 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
         Message::NewJob(installation) => {
             state
                 .results
-                .insert(installation.id, (Status::Pending, None, None));
+                .insert(installation.id, JobStatus::Pending);
             state.jobs.push(installation.clone());
         }
-        Message::StartedJob(installation, start_instant) => {
+        Message::StartedJob(installation, _start_instant) => {
             state.results.insert(
                 installation.id,
-                (Status::InProgress, Some(*start_instant), None),
+                JobStatus::InProgress,
             );
         }
         Message::FinishedJob(installation, result, duration) => {
             let status = match result {
-                Ok(()) => Status::Complete,
-                Err(_) => Status::Failed,
+                Ok(()) => JobStatus::Complete{duration: *duration},
+                Err(_) => JobStatus::Failed{duration: *duration},
             };
             state
                 .results
-                .insert(installation.id, (status, None, Some(*duration)));
+                .insert(installation.id, status);
         }
         Message::FinishedAll(rc, duration) => {
             let status = match rc {
@@ -292,11 +288,41 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
     }
 }
 
-#[derive(Clone)]
+enum JobStatus {
+    Pending,
+    InProgress,
+    Complete{duration: Duration},
+    Skipped,
+    Failed{duration: Duration},
+}
+
+impl JobStatus {
+    const fn duration(&self) -> Option<Duration> {
+        #![allow(clippy::match_same_arms)]
+        match self {
+            JobStatus::Pending => None,
+            JobStatus::InProgress{..} => None,
+            JobStatus::Complete{duration} => Some(*duration),
+            JobStatus::Skipped => None,
+            JobStatus::Failed{duration} => Some(*duration)
+         }
+    }
+
+    const fn status(&self) -> Status {
+        match self {
+            JobStatus::Pending => Status::Pending,
+            JobStatus::InProgress{..} => Status::InProgress,
+            JobStatus::Complete{..} => Status::Complete,
+            JobStatus::Skipped => Status::Skipped,
+            JobStatus::Failed{..} => Status::Failed,
+        }
+    }
+}
+// #[derive(Clone)]
 struct State {
     task: Option<Task>,
     start_instant: Option<Instant>,
-    results: HashMap<InstallationId, (Status, Option<Instant>, Option<Duration>)>,
+    results: HashMap<InstallationId, JobStatus>,
     versions: HashMap<InstallationId, (String, String)>,
     jobs: Vec<Arc<Installation>>,
     finished: Option<(Status, Duration)>,
