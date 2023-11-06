@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.2](https://github.com/electronicarts/helmci/compare/v0.3.1...v0.3.2) (2023-11-06)
+
+
+### Bug Fixes
+
+* clippy errors in CI ([8c53d92](https://github.com/electronicarts/helmci/commit/8c53d9276ba971df5e425a434004090cbc171f49))
+* Rename --cinc parameter to --cluster ([164e3cf](https://github.com/electronicarts/helmci/commit/164e3cf2126ba6eac237ca9e5c1e5d677e4e6890))
+
 ## [0.3.1](https://github.com/electronicarts/helmci/compare/v0.3.0...v0.3.1) (2023-08-09)
 
 
