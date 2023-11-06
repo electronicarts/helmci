@@ -158,7 +158,7 @@ struct Args {
 
     /// Filter releases to use based on cluster.
     #[clap(long)]
-    cinc: Vec<String>,
+    cluster: Vec<String>,
 
     /// The source directory containing the helm-values.
     #[clap(long)]
@@ -464,7 +464,7 @@ fn generate_todo(
                 // We don't show skipped entries to the user if the env was skipped or the cluster was skipped
                 let hide_skip = env.config.locked
                     || (args.env != "*" && args.env != env_name)
-                    || (!args.cinc.is_empty() && !args.cinc.contains(&cluster_name))
+                    || (!args.cluster.is_empty() && !args.cluster.contains(&cluster_name))
                     || cluster.config.locked;
 
                 // We also do skip entries if the install is to be skipped, these will be shown
