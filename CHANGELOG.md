@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/electronicarts/helmci/compare/v0.3.2...v0.3.3) (2023-11-09)
+
+
+### Bug Fixes
+
+* Ensure we set the correct registry and region when calling describe-images ([785a355](https://github.com/electronicarts/helmci/commit/785a3553e6bfbc133a699bab933fe9004ed9427e))
+
 ## [0.3.2](https://github.com/electronicarts/helmci/compare/v0.3.1...v0.3.2) (2023-11-06)
 
 
