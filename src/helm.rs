@@ -539,7 +539,9 @@ struct ImageDetails {
     image_digest: String,
     image_tags: Option<Vec<String>>,
     image_size_in_bytes: u32,
-    image_pushed_at: f32,
+    // This can be a float value or a string "2023-11-09T14:07:41+11:00"
+    // Probably depends on aws version.
+    // image_pushed_at: f32,
     image_manifest_media_type: String,
     artifact_media_type: String,
 }
@@ -559,11 +561,33 @@ async fn outdated_oci_chart(
     }
 
     let url = Url::parse(repo_url)?;
+    let host = url
+        .host()
+        .ok_or_else(|| anyhow::anyhow!("invalid repo url"))?;
+    let host_split = match host {
+        url::Host::Domain(host) => host.split('.').collect::<Vec<_>>(),
+        _ => return Err(anyhow::anyhow!("invalid repo url, expected hostname")),
+    };
+    if host_split.len() != 6
+        || host_split[1] != "dkr"
+        || host_split[2] != "ecr"
+        || host_split[4] != "amazonaws"
+        || host_split[5] != "com"
+    {
+        return Err(anyhow::anyhow!(
+            "invalid repo url, expected <account>.dkr.ecr.<region>.amazonaws.com"
+        ));
+    }
+    let account = host_split[0];
+    let region = host_split[3];
 
-    let args = vec![
+    let args: Vec<OsString> = vec![
         "ecr".into(),
         "describe-images".into(),
-        "--region=us-east-2".into(),
+        "--registry-id".into(),
+        account.into(),
+        "--region".into(),
+        region.into(),
         "--repository-name".into(),
         format!("{}/{chart_name}", url.path().trim_start_matches('/')).into(),
     ];
