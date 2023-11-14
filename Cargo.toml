@@ -23,7 +23,7 @@ hyper-rustls = "0.24.2"
 hyper = "0.14.27"
 async-trait = "0.1.74"
 tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 semver = "1.0.20"
 url = "2.4.1"
 futures = "0.3.29"
