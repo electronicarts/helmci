@@ -25,5 +25,5 @@ async-trait = "0.1.74"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 semver = "1.0.20"
-url = "2.4.1"
+url = "2.5.0"
 futures = "0.3.29"
