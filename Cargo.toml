@@ -15,7 +15,7 @@ log = { version = "0.4.20", features = ["std"] }
 lazy_static = "1.4.0"
 tui = "0.19.0"
 crossterm = { version = "0.27.0", features = ["event-stream"] }
-tabled = "0.14.0"
+tabled = "0.15.0"
 tokio = { version = "1", features = ["full"] }
 slack-morphism = { version = "1.16.1", features = ["hyper"] }
 chrono = "0.4.31"
