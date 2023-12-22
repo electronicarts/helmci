@@ -9,7 +9,7 @@ edition = "2021"
 anyhow = "1.0"
 clap = { version = "4.4.11", features = ["derive"] }
 serde = { version = "1.0.193", features = ["derive"] }
-serde_yaml = "0.9.28"
+serde_yaml = "0.9.29"
 serde_json = "1.0.108"
 log = { version = "0.4.20", features = ["std"] }
 lazy_static = "1.4.0"
