@@ -398,6 +398,7 @@ impl<'a> Iterator for HelmIter<'a> {
 
 type SkippedResult = (bool, Arc<Installation>);
 
+#[allow(clippy::cognitive_complexity)]
 fn generate_todo(
     args: &Args,
     list_release_names: &[String],
