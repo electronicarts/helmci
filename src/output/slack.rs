@@ -11,6 +11,8 @@ use anyhow::Error;
 use anyhow::Result;
 use async_trait::async_trait;
 use futures::Future;
+use hyper_rustls::HttpsConnector;
+use hyper_util::client::legacy::connect::HttpConnector;
 use slack_morphism::errors::SlackClientError;
 use slack_morphism::prelude::*;
 use std::collections::HashMap;
@@ -199,6 +201,7 @@ struct SlackState {
     slack_channel: String,
     announce_slack_channel: String,
     ts: Option<SlackTs>,
+    client: SlackClient<SlackClientHyperConnector<HttpsConnector<HttpConnector>>>,
 }
 
 async fn retry_slack<Fut, F, R>(f: F) -> Option<R>
@@ -245,11 +248,14 @@ impl SlackState {
         let announce_slack_channel: String =
             config_env_var("SLACK_CHANNEL_ANNOUNCE").unwrap_or_else(|_| slack_channel.clone());
 
+        let client = SlackClient::new(SlackClientHyperConnector::new()?);
+
         Ok(SlackState {
             token,
             slack_channel,
             announce_slack_channel,
             ts: None,
+            client,
         })
     }
 
@@ -258,8 +264,7 @@ impl SlackState {
             return Ok(());
         }
 
-        let client = SlackClient::new(SlackClientHyperConnector::new());
-        let session = client.open_session(&self.token);
+        let session = self.client.open_session(&self.token);
         let content = get_update_content(state);
 
         if let Some(ts) = &self.ts {
@@ -281,8 +286,7 @@ impl SlackState {
     }
 
     async fn update_slack_final(&mut self, state: &State) {
-        let client = SlackClient::new(SlackClientHyperConnector::new());
-        let session = client.open_session(&self.token);
+        let session = self.client.open_session(&self.token);
         let content = get_update_content(state);
 
         if let Some(ts) = &self.ts {
@@ -360,8 +364,7 @@ impl SlackState {
                 .with_blocks(blocks)
                 .with_text(title);
 
-            let client = SlackClient::new(SlackClientHyperConnector::new());
-            let session = client.open_session(&self.token);
+            let session = self.client.open_session(&self.token);
             let post_chat_req = SlackApiChatPostMessageRequest::new(
                 self.announce_slack_channel.clone().into(),
                 content,
@@ -413,8 +416,7 @@ impl SlackState {
             .with_blocks(blocks)
             .with_text(title);
 
-        let client = SlackClient::new(SlackClientHyperConnector::new());
-        let session = client.open_session(&self.token);
+        let session = self.client.open_session(&self.token);
         let post_chat_req =
             SlackApiChatPostMessageRequest::new(self.slack_channel.clone().into(), content);
 
