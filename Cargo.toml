@@ -24,7 +24,7 @@ hyper = "1.1.0"
 async-trait = "0.1.77"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
-semver = "1.0.21"
+semver = "1.0.22"
 url = "2.5.0"
 futures = "0.3.30"
 hyper-util = "0.1.3"
