@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/electronicarts/helmci/compare/v0.3.3...v0.4.0) (2024-04-08)
+
+
+### Features
+
+* When we skip an env or cluster then ignore config ([6f7a161](https://github.com/electronicarts/helmci/commit/6f7a161e2df4aad0c6f83ea4fcfe21604861c20b))
+
 ## [0.3.3](https://github.com/electronicarts/helmci/compare/v0.3.2...v0.3.3) (2023-11-09)
 
 
