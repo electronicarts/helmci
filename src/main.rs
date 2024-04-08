@@ -329,11 +329,9 @@ async fn do_task(
     let (skipped_list, todo) = generate_todo(args, list_release_names, &mut helm_repos)?;
 
     let mut skipped = InstallationSet::new();
-    for (show_skipped, item) in skipped_list {
+    for item in skipped_list {
         skipped.add(&item);
-        if show_skipped {
-            output.send(Message::SkippedJob(item)).await;
-        }
+        output.send(Message::SkippedJob(item)).await;
     }
 
     let jobs: Jobs = (task, todo);
@@ -396,7 +394,7 @@ impl<'a> Iterator for HelmIter<'a> {
     }
 }
 
-type SkippedResult = (bool, Arc<Installation>);
+type SkippedResult = Arc<Installation>;
 
 #[allow(clippy::cognitive_complexity)]
 fn generate_todo(
@@ -408,7 +406,7 @@ fn generate_todo(
     let envs = Env::list_all_env(&vdir)
         .with_context(|| format!("Cannot list envs from vdir {}", vdir.display()))?;
     let mut todo: Vec<Arc<Installation>> = Vec::new();
-    let mut skipped: Vec<(bool, Arc<Installation>)> = Vec::new();
+    let mut skipped: Vec<SkippedResult> = Vec::new();
     let mut seen = InstallationSet::default();
     let mut next_id: InstallationId = 0;
 
@@ -429,6 +427,11 @@ fn generate_todo(
             continue;
         }
 
+        if args.env != "*" && args.env != env_name {
+            trace!("Skipping env {}", env.name);
+            continue;
+        }
+
         trace!("Processing env {}", env.name);
 
         let all_clusters = env
@@ -441,6 +444,11 @@ fn generate_todo(
 
             if cluster.config.locked {
                 warn!("Skipping locked cluster {}", cluster.name);
+                continue;
+            }
+
+            if !args.cluster.is_empty() && !args.cluster.contains(&cluster_name) {
+                trace!("Skipping cluster {}", cluster.name);
                 continue;
             }
 
@@ -462,18 +470,11 @@ fn generate_todo(
                     AutoState::All => false,
                 };
 
-                // We don't show skipped entries to the user if the env was skipped or the cluster was skipped
-                let hide_skip = env.config.locked
-                    || (args.env != "*" && args.env != env_name)
-                    || (!args.cluster.is_empty() && !args.cluster.contains(&cluster_name))
-                    || cluster.config.locked;
-
                 // We also do skip entries if the install is to be skipped, these will be shown
                 let skip = (!list_release_names.is_empty()
                     && !list_release_names.contains(&install.name))
                     || install.config.locked
-                    || auto_skip
-                    || hide_skip;
+                    || auto_skip;
 
                 let installation =
                     create_installation(&env, &cluster, install, next_id, helm_repos);
@@ -492,7 +493,7 @@ fn generate_todo(
                 // Note: skipped installs count towards dependency requirements
                 let installation = Arc::new(installation);
                 if skip {
-                    skipped.push((!hide_skip, installation));
+                    skipped.push(installation);
                 } else {
                     todo.push(installation);
                 }
