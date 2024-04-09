@@ -759,9 +759,9 @@ async fn worker_thread(
             }
             Err(err) => {
                 output
-                    .send(Message::Log(log(
+                    .send(Message::Log(log!(
                         Level::ERROR,
-                        &format!("job failed: {err}"),
+                        &format!("job failed: {err}")
                     )))
                     .await;
                 errors = true;

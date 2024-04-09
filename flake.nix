@@ -20,8 +20,10 @@
           overlays = [ (import rust-overlay) ];
         };
 
-        osxlibs = pkgs.lib.lists.optional pkgs.stdenv.isDarwin
-          pkgs.darwin.apple_sdk.frameworks.Security;
+        osxlibs = pkgs.lib.lists.optionals pkgs.stdenv.isDarwin [
+          pkgs.darwin.apple_sdk.frameworks.Security
+          pkgs.darwin.apple_sdk.frameworks.Foundation
+        ];
 
         src = ./.;
 

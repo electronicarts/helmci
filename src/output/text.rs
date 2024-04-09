@@ -244,7 +244,7 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
             if our_version != upstream_version {
                 state.versions.insert(
                     installation.id,
-                    (our_version.clone(), upstream_version.clone()),
+                    (our_version.to_string(), upstream_version.to_string()),
                 );
             }
         }

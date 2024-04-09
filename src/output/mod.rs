@@ -5,6 +5,7 @@
 //! A job may consist of one or more commands that need to be executed for successful completion of the job.
 use anyhow::Result;
 use async_trait::async_trait;
+use semver::Version;
 use std::{sync::Arc, time::Duration};
 use tokio::{sync::mpsc, time::Instant};
 
@@ -26,7 +27,7 @@ pub enum Message {
     /// A new job that is not going to be skipped.
     NewJob(Arc<Installation>),
     /// The version data for a job - only if outdated report requested.
-    InstallationVersion(Arc<Installation>, String, String),
+    InstallationVersion(Arc<Installation>, Version, Version),
     /// The result of running a single command for a job.
     InstallationResult(Arc<HelmResult>),
     /// Notification that we started a job.

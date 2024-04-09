@@ -670,7 +670,7 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
     match msg.as_ref() {
         Message::SkippedJob(i) => {
             let str = format!("Skipped Job {}", i.name);
-            state.logs.add_log(log(tracing::Level::INFO, &str));
+            state.logs.add_log(log!(tracing::Level::INFO, &str));
             // Need to think about if we want skipped jobs to appear in list or not
             // state.job_status.insert(i.uuid, JobStatus::Skipped);
             // state.jobs.items.push(i);
@@ -681,12 +681,12 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
                     "Installation {} our version {our_version} upstream version {upstream_version}",
                     i.name
                 );
-                state.logs.add_log(log(tracing::Level::INFO, &str));
+                state.logs.add_log(log!(tracing::Level::INFO, &str));
             }
         }
         Message::NewJob(i) => {
             let str = format!("Job {}", i.name);
-            state.logs.add_log(log(tracing::Level::DEBUG, &str));
+            state.logs.add_log(log!(tracing::Level::DEBUG, &str));
             state.job_status.insert(i.id, JobStatus::New);
             state.jobs.items.push(i.clone());
         }
@@ -695,14 +695,14 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
         }
         Message::StartedJob(i, start_instant) => {
             let str = format!("Started {}", i.name);
-            state.logs.add_log(log(tracing::Level::INFO, &str));
+            state.logs.add_log(log!(tracing::Level::INFO, &str));
             state
                 .job_status
                 .insert(i.id, JobStatus::Started(*start_instant));
         }
         Message::FinishedJob(i, result, duration) => {
             let str = format!("Finished {}", i.name);
-            state.logs.add_log(log(tracing::Level::INFO, &str));
+            state.logs.add_log(log!(tracing::Level::INFO, &str));
             state
                 .job_status
                 .insert(i.id, JobStatus::Finished(result.is_ok(), *duration));
@@ -722,7 +722,7 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
                 state.has_errors = true;
             };
             let str = format!("Finished Everything {}", duration_string(duration));
-            state.logs.add_log(log(tracing::Level::INFO, &str));
+            state.logs.add_log(log!(tracing::Level::INFO, &str));
             state.finished = true;
             state.finished_duration = Some(*duration);
         }

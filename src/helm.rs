@@ -13,6 +13,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use tap::Pipe;
 use tracing::{debug, error};
 use url::Url;
 
@@ -490,6 +491,9 @@ async fn outdated_helm_chart(
     chart_version: &str,
     tx: &MultiOutput,
 ) -> Result<()> {
+    let chart_version = Version::parse(chart_version)
+        .map_err(|err| anyhow::anyhow!("Failed to parse version {chart_version:?} {err:?}"))?;
+
     let args = vec![
         "search".into(),
         "repo".into(),
@@ -503,10 +507,16 @@ async fn outdated_helm_chart(
 
     if let Ok(CommandSuccess { stdout, .. }) = &result {
         let version: Vec<HelmVersionInfo> = serde_json::from_str(stdout)?;
+        let version = version.get(0).ok_or_else(|| {
+            anyhow::anyhow!("No version information found for chart {chart_name}")
+        })?;
+        let version = parse_version(&version.version)
+            .map_err(|err| anyhow::anyhow!("Failed to parse version {version:?} {err:?}"))?;
+
         tx.send(Message::InstallationVersion(
             installation.clone(),
             chart_version.to_owned(),
-            version[0].version.clone(),
+            version,
         ))
         .await;
     };
@@ -546,6 +556,133 @@ struct ImageDetails {
     artifact_media_type: String,
 }
 
+/// Public AWS token
+#[derive(Deserialize, Debug)]
+struct AwsToken {
+    token: String,
+}
+
+/// Parsed Public OCI tags
+#[allow(dead_code)]
+#[derive(Deserialize, Debug)]
+struct AwsTags {
+    name: String,
+    tags: Vec<String>,
+}
+
+enum ParsedOci {
+    Private {
+        account: String,
+        region: String,
+        path: String,
+    },
+    Public {
+        path: String,
+    },
+}
+
+impl ParsedOci {
+    fn new(url: &Url, chart_name: &str) -> Result<Self> {
+        let host = url
+            .host()
+            .ok_or_else(|| anyhow::anyhow!("invalid repo url"))?;
+        let host_split = match host {
+            url::Host::Domain(host) => host.split('.').collect::<Vec<_>>(),
+            _ => return Err(anyhow::anyhow!("invalid repo url, expected hostname")),
+        };
+        if host_split.len() == 6
+            && host_split[1] == "dkr"
+            && host_split[2] == "ecr"
+            && host_split[4] == "amazonaws"
+            && host_split[5] == "com"
+        {
+            let account = host_split[0].to_string();
+            let region = host_split[3].to_string();
+            let path = format!("{}/{chart_name}", url.path().trim_start_matches('/'));
+
+            Self::Private {
+                account,
+                region,
+                path,
+            }
+            .pipe(Ok)
+        } else if host_split == ["public", "ecr", "aws"] {
+            let path = format!("{chart_name}/{chart_name}");
+            Self::Public { path }.pipe(Ok)
+        } else {
+            return Err(anyhow::anyhow!(
+                "Unsupported OCI repo url {url}",
+                url = url.to_string()
+            ));
+        }
+    }
+
+    async fn get_latest_version(
+        &self,
+        installation: &Arc<Installation>,
+        tx: &MultiOutput,
+    ) -> Result<Version> {
+        match self {
+            ParsedOci::Private {
+                account,
+                region,
+                path,
+            } => {
+                let args: Vec<OsString> = vec![
+                    "ecr".into(),
+                    "describe-images".into(),
+                    "--registry-id".into(),
+                    account.into(),
+                    "--region".into(),
+                    region.into(),
+                    "--repository-name".into(),
+                    path.into(),
+                ];
+
+                let command_line = CommandLine(aws_path(), args);
+                let result = command_line.run().await;
+
+                let rc = match &result {
+                    Ok(CommandSuccess { stdout, .. }) => {
+                        let details: OciDetails = serde_json::from_str(&stdout)?;
+                        if let Some(version) = get_latest_version_from_details(details) {
+                            Ok(version)
+                        } else {
+                            Err(anyhow::anyhow!("no versions found"))
+                        }
+                    }
+                    Err(err) => Err(anyhow::anyhow!("The describe-images command failed: {err}")),
+                };
+
+                let i_result = HelmResult::from_result(installation, result, Command::Outdated);
+                let i_result = Arc::new(i_result);
+                tx.send(Message::InstallationResult(i_result)).await;
+
+                rc
+            }
+            ParsedOci::Public { path } => {
+                let token: AwsToken = reqwest::get("https://public.ecr.aws/token/")
+                    .await?
+                    .json()
+                    .await?;
+
+                let tags: AwsTags = reqwest::Client::new()
+                    .get(&format!("https://public.ecr.aws/v2/{}/tags/list", path))
+                    .header("Authorization", format!("Bearer {}", token.token))
+                    .send()
+                    .await?
+                    .json()
+                    .await?;
+
+                match get_latest_version_from_tags(tags) {
+                    Some(version) => Ok(version),
+                    None => Err(anyhow::anyhow!("no versions found")),
+                }
+            }
+        }
+    }
+}
+
 /// Generate the outdated report for an OCI chart reference stored on ECR.
 async fn outdated_oci_chart(
     installation: &Arc<Installation>,
@@ -560,83 +697,60 @@ async fn outdated_oci_chart(
         return Ok(());
     }
 
+    let chart_version = parse_version(chart_version)
+        .map_err(|err| anyhow::anyhow!("Failed to parse version {chart_version:?} {err:?}"))?;
+
     let url = Url::parse(repo_url)?;
-    let host = url
-        .host()
-        .ok_or_else(|| anyhow::anyhow!("invalid repo url"))?;
-    let host_split = match host {
-        url::Host::Domain(host) => host.split('.').collect::<Vec<_>>(),
-        _ => return Err(anyhow::anyhow!("invalid repo url, expected hostname")),
-    };
-    if host_split.len() != 6
-        || host_split[1] != "dkr"
-        || host_split[2] != "ecr"
-        || host_split[4] != "amazonaws"
-        || host_split[5] != "com"
-    {
-        return Err(anyhow::anyhow!(
-            "invalid repo url, expected <account>.dkr.ecr.<region>.amazonaws.com"
-        ));
-    }
-    let account = host_split[0];
-    let region = host_split[3];
+    let parsed = ParsedOci::new(&url, chart_name)?;
 
-    let args: Vec<OsString> = vec![
-        "ecr".into(),
-        "describe-images".into(),
-        "--registry-id".into(),
-        account.into(),
-        "--region".into(),
-        region.into(),
-        "--repository-name".into(),
-        format!("{}/{chart_name}", url.path().trim_start_matches('/')).into(),
-    ];
+    let latest_version = parsed
+        .get_latest_version(installation, &tx)
+        .await
+        .map_err(|err| anyhow::anyhow!("Get latest version failed {err:?}"))?;
+    tx.send(Message::InstallationVersion(
+        installation.clone(),
+        chart_version,
+        latest_version,
+    ))
+    .await;
 
-    let command_line = CommandLine(aws_path(), args);
-    let result = command_line.run().await;
-    let has_errors = result.is_err();
-
-    if let Ok(CommandSuccess { stdout, .. }) = &result {
-        let details: OciDetails = serde_json::from_str(stdout)?;
-        if let Some(version) = get_latest_version(details) {
-            tx.send(Message::InstallationVersion(
-                installation.clone(),
-                chart_version.to_owned(),
-                version,
-            ))
-            .await;
-        }
-    };
-
-    let i_result = HelmResult::from_result(installation, result, Command::Outdated);
-    let i_result = Arc::new(i_result);
-    tx.send(Message::InstallationResult(i_result)).await;
-
-    if has_errors {
-        Err(anyhow::anyhow!("outdated operation failed"))
-    } else {
-        Ok(())
-    }
+    Ok(())
 }
 
 /// Parse a semver complaint version.
-fn parse_version(tag: &str) -> Option<Version> {
-    Version::parse(tag).ok()
+fn parse_version(tag: &str) -> Result<Version> {
+    let tag = tag.strip_prefix('v').unwrap_or(tag);
+    Version::parse(tag)?.pipe(Ok)
 }
 
 /// Get the latest version for the given `OciDetails`.
-fn get_latest_version(details: OciDetails) -> Option<String> {
+fn get_latest_version_from_details(details: OciDetails) -> Option<Version> {
     let mut versions = vec![];
     for image in details.image_details {
         if let Some(tags) = image.image_tags {
             for tag in tags {
-                if let Some(version) = parse_version(&tag) {
-                    versions.push(version);
+                match parse_version(&tag) {
+                    Ok(version) => versions.push(version),
+                    Err(err) => error!("Cannot parse version {tag} {err}"),
                 }
             }
         }
     }
 
     versions.sort();
-    versions.last().map(std::string::ToString::to_string)
+    versions.last().cloned()
+}
+
+/// Get the latest version for the given `AwsTags`.
+fn get_latest_version_from_tags(tags: AwsTags) -> Option<Version> {
+    let mut versions = vec![];
+    for tag in tags.tags {
+        match parse_version(&tag) {
+            Ok(version) => versions.push(version),
+            Err(err) => error!("Cannot parse version {tag} {err}"),
+        }
+    }
+
+    versions.sort();
+    versions.last().cloned()
 }

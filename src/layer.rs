@@ -31,11 +31,19 @@ pub struct LogEntry {
     pub message: String,
 }
 
+macro_rules! log {
+    ($level:expr, $message:expr) => {
+        $crate::layer::raw_log($level, format!("{}:{}", file!(), line!()), $message)
+    };
+}
+
+pub(crate) use log;
+
 /// Create a log entry object.
-pub fn log(level: Level, message: &str) -> LogEntry {
+pub fn raw_log(level: Level, name: impl Into<String>, message: impl Into<String>) -> LogEntry {
     LogEntry {
         target: "helmci".into(),
-        name: "log tui.rs".into(),
+        name: name.into(),
         level,
         message: message.into(),
     }
