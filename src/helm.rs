@@ -491,7 +491,7 @@ async fn outdated_helm_chart(
     chart_version: &str,
     tx: &MultiOutput,
 ) -> Result<()> {
-    let chart_version = Version::parse(chart_version)
+    let chart_version = parse_version(chart_version)
         .map_err(|err| anyhow::anyhow!("Failed to parse version {chart_version:?} {err:?}"))?;
 
     let args = vec![
@@ -715,7 +715,13 @@ async fn outdated_oci_chart(
 /// Parse a semver complaint version.
 fn parse_version(tag: &str) -> Result<Version> {
     let tag = tag.strip_prefix('v').unwrap_or(tag);
-    Version::parse(tag)?.pipe(Ok)
+    let version = if tag.contains('.') {
+        Version::parse(tag)?
+    } else {
+        let tag = &format!("{tag}.0.0");
+        Version::parse(tag)?
+    };
+    Ok(version)
 }
 
 /// Get the latest version for the given `OciDetails`.
