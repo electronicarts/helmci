@@ -7,7 +7,11 @@ use anyhow::Result;
 use semver::Version;
 use serde::Deserialize;
 use std::{
-    ffi::OsString, fmt::{Debug, Display}, path::PathBuf, sync::Arc, time::Duration
+    ffi::OsString,
+    fmt::{Debug, Display},
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
 };
 use tap::Pipe;
 use tracing::{debug, error};
@@ -727,7 +731,10 @@ fn get_latest_version_from_details(details: OciDetails) -> Option<Version> {
                 }
                 match parse_version(&tag) {
                     Ok(version) => versions.push(version),
-                    Err(err) => error!("Cannot parse version {} {tag}: {err}", image.repository_name),
+                    Err(err) => error!(
+                        "Cannot parse version {} {tag}: {err}",
+                        image.repository_name
+                    ),
                 }
             }
         }
@@ -756,5 +763,8 @@ fn get_latest_version_from_tags(path: &str, tags: AwsTags) -> Option<Version> {
 
 // Check if version is non semver compliant or legacy and should be ignored
 fn is_ignorable_tag(tag: &str) -> bool {
-    tag.starts_with("v0-") || tag.starts_with("sha256-") || tag.starts_with("0.0.0_") || !tag.contains('.')
+    tag.starts_with("v0-")
+        || tag.starts_with("sha256-")
+        || tag.starts_with("0.0.0_")
+        || !tag.contains('.')
 }
