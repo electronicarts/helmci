@@ -6,7 +6,7 @@ use crate::duration::duration_string;
 use crate::helm::HelmResult;
 use crate::helm::Installation;
 use crate::helm::InstallationId;
-use crate::Task;
+use crate::Request;
 use anyhow::Result;
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -274,7 +274,7 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
             state.finished = Some((status, *duration));
         }
         Message::Start(task, start_instant) => {
-            state.task = Some(*task);
+            state.task = Some(task.clone());
             state.start_instant = Some(*start_instant);
         }
     }
@@ -312,7 +312,7 @@ impl JobStatus {
 }
 // #[derive(Clone)]
 struct State {
-    task: Option<Task>,
+    task: Option<Arc<Request>>,
     start_instant: Option<Instant>,
     results: HashMap<InstallationId, JobStatus>,
     versions: HashMap<InstallationId, (String, String)>,

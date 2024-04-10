@@ -70,28 +70,22 @@ pub fn is_depends_ok(installation: &Installation, done: &InstallationSet) -> boo
 mod tests {
     use std::path::PathBuf;
 
-    use crate::config::AnnouncePolicy;
+    use crate::config::{AnnouncePolicy, ChartReference};
 
     #[allow(clippy::wildcard_imports)]
-    use crate::{
-        config::ReleaseReference,
-        depends::*,
-        helm::{HelmChart, HelmRepo, Installation},
-    };
+    use crate::{config::ReleaseReference, depends::*, helm::Installation};
 
     #[test]
     fn test_get_depends_order_good() {
         let todo = vec![
             Installation {
                 name: "ingress-nginx-ext".to_string(),
+                config_file: "config.yaml".into(),
                 values_files: vec![],
                 env_name: "dev".to_string(),
                 cluster_name: "spartan".to_string(),
-                chart: HelmChart::HelmRepo {
-                    repo: HelmRepo {
-                        name: "ingress-nginx".to_string(),
-                        url: "https://kubernetes.github.io/ingress-nginx".to_string(),
-                    },
+                chart_reference: ChartReference::Helm {
+                    repo_url: "https://kubernetes.github.io/ingress-nginx".to_string(),
                     chart_name: "ingress-nginx".to_string(),
                     chart_version: "4.0.10".to_string(),
                 },
@@ -104,14 +98,12 @@ mod tests {
             },
             Installation {
                 name: "ingress-nginx-ext-2".to_string(),
+                config_file: "config.yaml".into(),
                 values_files: vec![],
                 env_name: "dev".to_string(),
                 cluster_name: "spartan".to_string(),
-                chart: HelmChart::HelmRepo {
-                    repo: HelmRepo {
-                        name: "ingress-nginx".to_string(),
-                        url: "https://kubernetes.github.io/ingress-nginx".to_string(),
-                    },
+                chart_reference: ChartReference::Helm {
+                    repo_url: "https://kubernetes.github.io/ingress-nginx".to_string(),
                     chart_name: "ingress-nginx".to_string(),
                     chart_version: "4.0.10".to_string(),
                 },
@@ -124,10 +116,13 @@ mod tests {
             },
             Installation {
                 name: "exporter-blackbox".to_string(),
+                config_file: "config.yaml".into(),
                 values_files: vec![],
                 env_name: "dev".to_string(),
                 cluster_name: "spartan".to_string(),
-                chart: HelmChart::Dir(PathBuf::from("charts/prometheus-blackbox-exporter")),
+                chart_reference: ChartReference::Local {
+                    path: PathBuf::from("charts/prometheus-blackbox-exporter"),
+                },
                 depends: vec![ReleaseReference {
                     namespace: "kube-system".to_string(),
                     name: "ingress-nginx-ext".to_string(),
@@ -140,10 +135,13 @@ mod tests {
             },
             Installation {
                 name: "exporter-blackbox-2".to_string(),
+                config_file: "config.yaml".into(),
                 values_files: vec![],
                 env_name: "dev".to_string(),
                 cluster_name: "spartan".to_string(),
-                chart: HelmChart::Dir(PathBuf::from("charts/prometheus-blackbox-exporter")),
+                chart_reference: ChartReference::Local {
+                    path: PathBuf::from("charts/prometheus-blackbox-exporter"),
+                },
                 depends: vec![ReleaseReference {
                     namespace: "kube-system".to_string(),
                     name: "ingress-nginx-ext".to_string(),
@@ -174,14 +172,12 @@ mod tests {
         let todo = vec![
             Installation {
                 name: "ingress-nginx-ext".to_string(),
+                config_file: "config.yaml".into(),
                 values_files: vec![],
                 env_name: "dev".to_string(),
                 cluster_name: "spartan".to_string(),
-                chart: HelmChart::HelmRepo {
-                    repo: HelmRepo {
-                        name: "ingress-nginx".to_string(),
-                        url: "https://kubernetes.github.io/ingress-nginx".to_string(),
-                    },
+                chart_reference: ChartReference::Helm {
+                    repo_url: "https://kubernetes.github.io/ingress-nginx".to_string(),
                     chart_name: "ingress-nginx".to_string(),
                     chart_version: "4.0.10".to_string(),
                 },
@@ -194,10 +190,13 @@ mod tests {
             },
             Installation {
                 name: "exporter-blackbox".to_string(),
+                config_file: "config.yaml".into(),
                 values_files: vec![],
                 env_name: "dev".to_string(),
                 cluster_name: "spartan".to_string(),
-                chart: HelmChart::Dir(PathBuf::from("charts/prometheus-blackbox-exporter")),
+                chart_reference: ChartReference::Local {
+                    path: PathBuf::from("charts/prometheus-blackbox-exporter"),
+                },
                 depends: vec![
                     ReleaseReference {
                         namespace: "kube-system".to_string(),
@@ -235,14 +234,12 @@ mod tests {
         let todo = vec![
             Installation {
                 name: "ingress-nginx-ext".to_string(),
+                config_file: "config.yaml".into(),
                 values_files: vec![],
                 env_name: "dev".to_string(),
                 cluster_name: "spartan".to_string(),
-                chart: HelmChart::HelmRepo {
-                    repo: HelmRepo {
-                        name: "ingress-nginx".to_string(),
-                        url: "https://kubernetes.github.io/ingress-nginx".to_string(),
-                    },
+                chart_reference: ChartReference::Helm {
+                    repo_url: "https://kubernetes.github.io/ingress-nginx".to_string(),
                     chart_name: "ingress-nginx".to_string(),
                     chart_version: "4.0.10".to_string(),
                 },
@@ -258,10 +255,13 @@ mod tests {
             },
             Installation {
                 name: "exporter-blackbox".to_string(),
+                config_file: "config.yaml".into(),
                 values_files: vec![],
                 env_name: "dev".to_string(),
                 cluster_name: "spartan".to_string(),
-                chart: HelmChart::Dir(PathBuf::from("charts/prometheus-blackbox-exporter")),
+                chart_reference: ChartReference::Local {
+                    path: PathBuf::from("charts/prometheus-blackbox-exporter"),
+                },
                 depends: vec![ReleaseReference {
                     namespace: "kube-system".to_string(),
                     name: "ingress-nginx-ext".to_string(),
@@ -292,14 +292,12 @@ mod tests {
         // test item depends on itself
         let todo = vec![Installation {
             name: "ingress-nginx-ext".to_string(),
+            config_file: "config.yaml".into(),
             values_files: vec![],
             env_name: "dev".to_string(),
             cluster_name: "spartan".to_string(),
-            chart: HelmChart::HelmRepo {
-                repo: HelmRepo {
-                    name: "ingress-nginx".to_string(),
-                    url: "https://kubernetes.github.io/ingress-nginx".to_string(),
-                },
+            chart_reference: ChartReference::Helm {
+                repo_url: "https://kubernetes.github.io/ingress-nginx".to_string(),
                 chart_name: "ingress-nginx".to_string(),
                 chart_version: "4.0.10".to_string(),
             },
@@ -326,14 +324,12 @@ mod tests {
         // test item depends on non-existant install
         let todo = vec![Installation {
             name: "ingress-nginx-ext".to_string(),
+            config_file: "config.yaml".into(),
             values_files: vec![],
             env_name: "dev".to_string(),
             cluster_name: "spartan".to_string(),
-            chart: HelmChart::HelmRepo {
-                repo: HelmRepo {
-                    name: "ingress-nginx".to_string(),
-                    url: "https://kubernetes.github.io/ingress-nginx".to_string(),
-                },
+            chart_reference: ChartReference::Helm {
+                repo_url: "https://kubernetes.github.io/ingress-nginx".to_string(),
                 chart_name: "ingress-nginx".to_string(),
                 chart_version: "4.0.10".to_string(),
             },

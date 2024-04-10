@@ -6,7 +6,7 @@ use crate::config::AnnouncePolicy;
 use crate::duration::duration_string;
 use crate::helm::Installation;
 use crate::helm::InstallationId;
-use crate::Task;
+use crate::Request;
 use anyhow::Error;
 use anyhow::Result;
 use async_trait::async_trait;
@@ -260,7 +260,7 @@ impl SlackState {
     }
 
     async fn update_slack(&mut self, state: &State) -> Result<(), SlackClientError> {
-        if state.task.is_none() {
+        if state.request.is_none() {
             return Ok(());
         }
 
@@ -321,13 +321,13 @@ impl SlackState {
                     .get(&installation.id)
                     .map(|(status, _, _)| (installation, status))
             })
-            .filter(
-                |(installation, _)| match (&installation.announce_policy, state.task) {
-                    (AnnouncePolicy::UpgradeOnly, Some(Task::Upgrade)) => true,
+            .filter(|(installation, _)| {
+                match (&installation.announce_policy, state.request.as_deref()) {
+                    (AnnouncePolicy::UpgradeOnly, Some(Request::Upgrade { .. })) => true,
                     (AnnouncePolicy::AllTasks, _) => true,
                     (_, _) => false,
-                },
-            );
+                }
+            });
 
         let num_data = data.clone().count();
 
@@ -342,12 +342,13 @@ impl SlackState {
             for (installation, status) in data {
                 let version = installation.get_display_version();
 
-                let verb = match state.task {
-                    Some(Task::Upgrade) => "upgraded to",
-                    Some(Task::Diff) => "diffed with",
-                    Some(Task::Test) => "tested with",
-                    Some(Task::Template) => "templated with",
-                    Some(Task::Outdated) => "version checked with",
+                let verb = match state.request.as_deref() {
+                    Some(Request::Upgrade { .. }) => "upgraded to",
+                    Some(Request::Diff { .. }) => "diffed with",
+                    Some(Request::Test { .. }) => "tested with",
+                    Some(Request::Template { .. }) => "templated with",
+                    Some(Request::Outdated { .. }) => "version checked with",
+                    Some(Request::Update { .. }) => "updated values",
                     None => "processed",
                 };
                 let cluster = installation.cluster_name.clone();
@@ -470,13 +471,14 @@ fn get_outdated_blocks(state: &State) -> Vec<SlackBlock> {
 }
 
 fn slack_title(state: &State) -> String {
-    let task = match state.task {
-        Some(Task::Diff) => "diff",
-        Some(Task::Upgrade) => "upgrade",
-        Some(Task::Test) => "test",
-        Some(Task::Template) => "template",
-        Some(Task::Outdated) => "outdated",
-        None => "unknown2",
+    let task = match state.request.as_deref() {
+        Some(Request::Diff { .. }) => "diff",
+        Some(Request::Upgrade { .. }) => "upgrade",
+        Some(Request::Test { .. }) => "test",
+        Some(Request::Template { .. }) => "template",
+        Some(Request::Outdated { .. }) => "outdated",
+        Some(Request::Update { .. }) => "update",
+        None => "unknown",
     };
     format!("helmci - {task}")
 }
@@ -549,8 +551,8 @@ async fn process_message(msg: &Arc<Message>, state: &mut State, slack: &SlackSta
             };
             state.finished = Some((status, *duration));
         }
-        Message::Start(task, start_instant) => {
-            state.task = Some(*task);
+        Message::Start(request, start_instant) => {
+            state.request = Some(request.clone());
             state.start_instant = Some(*start_instant);
         }
     }
@@ -558,7 +560,7 @@ async fn process_message(msg: &Arc<Message>, state: &mut State, slack: &SlackSta
 
 #[derive(Clone)]
 struct State {
-    task: Option<Task>,
+    request: Option<Arc<Request>>,
     start_instant: Option<Instant>,
     results: HashMap<InstallationId, (Status, Option<Instant>, Option<Duration>)>,
     versions: HashMap<InstallationId, (String, String)>,
@@ -571,7 +573,7 @@ pub fn start() -> Result<(SlackOutput, Sender)> {
 
     let thread = tokio::spawn(async move {
         let mut state = State {
-            task: None,
+            request: None,
             start_instant: None,
             results: HashMap::new(),
             versions: HashMap::new(),

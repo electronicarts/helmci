@@ -3,28 +3,31 @@
 //! Define helm commands.
 //!
 //! This defines a list of commands that take a message to the output server and an installation to act on.
+use super::layer::log;
 use anyhow::Result;
 use semver::Version;
 use serde::Deserialize;
 use std::{
     ffi::OsString,
     fmt::{Debug, Display},
+    fs::read_to_string,
     path::PathBuf,
     sync::Arc,
     time::Duration,
 };
 use tap::Pipe;
-use tracing::{debug, error};
+use tracing::{debug, error, Level};
 use url::Url;
 
 use crate::{
     command::{CommandLine, CommandResult, CommandSuccess},
-    config::{AnnouncePolicy, ReleaseReference},
+    config::{AnnouncePolicy, ChartReference, ReleaseReference},
     output::{Message, MultiOutput},
+    HelmReposLock, Update,
 };
 
 /// A reference to a Helm Repo.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct HelmRepo {
     pub name: String,
     pub url: String,
@@ -32,10 +35,10 @@ pub struct HelmRepo {
 
 /// A reference to a helm chart.
 #[derive(Debug)]
-pub enum HelmChart {
+pub enum HelmChart<'a> {
     Dir(PathBuf),
     HelmRepo {
-        repo: HelmRepo,
+        repo: &'a HelmRepo,
         chart_name: String,
         chart_version: String,
     },
@@ -78,8 +81,9 @@ pub struct Installation {
     pub env_name: String,
     pub cluster_name: String,
     pub context: String,
+    pub config_file: PathBuf,
     pub values_files: Vec<ValuesFile>,
-    pub chart: HelmChart,
+    pub chart_reference: ChartReference,
     pub depends: Vec<ReleaseReference>,
     pub timeout: u16,
     pub id: InstallationId,
@@ -88,10 +92,10 @@ pub struct Installation {
 
 impl Installation {
     pub fn get_display_version(&self) -> &str {
-        match &self.chart {
-            HelmChart::Dir(_) => "local",
-            HelmChart::HelmRepo { chart_version, .. }
-            | HelmChart::OciRepo { chart_version, .. } => chart_version,
+        match &self.chart_reference {
+            ChartReference::Helm { chart_version, .. }
+            | ChartReference::Oci { chart_version, .. } => chart_version.as_str(),
+            ChartReference::Local { .. } => "local",
         }
     }
 }
@@ -240,7 +244,7 @@ pub async fn remove_repo(
 
 /// Run the lint command.
 pub async fn lint(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<()> {
-    if let HelmChart::Dir(dir) = &installation.chart {
+    if let ChartReference::Local { path } = &installation.chart_reference {
         let mut args = vec![
             "lint".into(),
             "--namespace".into(),
@@ -250,7 +254,7 @@ pub async fn lint(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<
         ];
 
         args.append(&mut add_values_files(installation));
-        args.push(dir.clone().into_os_string());
+        args.push(path.clone().into_os_string());
         args.append(&mut get_template_parameters(installation));
 
         let command_line = CommandLine(helm_path(), args);
@@ -338,8 +342,13 @@ fn get_args_from_chart(chart: &HelmChart) -> (OsString, Vec<OsString>) {
 }
 
 /// Run the helm template command.
-pub async fn template(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<()> {
-    let (chart, mut chart_args) = get_args_from_chart(&installation.chart);
+pub async fn template(
+    installation: &Arc<Installation>,
+    repos: &HelmReposLock,
+    tx: &MultiOutput,
+) -> Result<()> {
+    let chart = repos.get_helm_chart(&installation.chart_reference)?;
+    let (chart, mut chart_args) = get_args_from_chart(&chart);
 
     let mut args = vec![
         "template".into(),
@@ -371,8 +380,13 @@ pub async fn template(installation: &Arc<Installation>, tx: &MultiOutput) -> Res
 }
 
 /// Run the helm diff command.
-pub async fn diff(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<()> {
-    let (chart, mut chart_args) = get_args_from_chart(&installation.chart);
+pub async fn diff(
+    installation: &Arc<Installation>,
+    helm_repos: &HelmReposLock,
+    tx: &MultiOutput,
+) -> Result<()> {
+    let chart = helm_repos.get_helm_chart(&installation.chart_reference)?;
+    let (chart, mut chart_args) = get_args_from_chart(&chart);
 
     let mut args = vec![
         "diff".into(),
@@ -409,10 +423,12 @@ pub async fn diff(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<
 /// Run the helm upgrade command.
 pub async fn upgrade(
     installation: &Arc<Installation>,
+    repos: &HelmReposLock,
     tx: &MultiOutput,
     dry_run: bool,
 ) -> Result<()> {
-    let (chart, mut chart_args) = get_args_from_chart(&installation.chart);
+    let chart = repos.get_helm_chart(&installation.chart_reference)?;
+    let (chart, mut chart_args) = get_args_from_chart(&chart);
 
     let mut args = vec![
         "upgrade".into(),
@@ -456,8 +472,13 @@ pub async fn upgrade(
 }
 
 /// Run the helm outdated command.
-pub async fn outdated(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<()> {
-    match &installation.chart {
+pub async fn outdated(
+    installation: &Arc<Installation>,
+    repos: &HelmReposLock,
+    tx: &MultiOutput,
+) -> Result<()> {
+    let chart = repos.get_helm_chart(&installation.chart_reference)?;
+    match &chart {
         HelmChart::Dir(_) => {}
         HelmChart::HelmRepo {
             repo,
@@ -767,4 +788,46 @@ fn is_ignorable_tag(tag: &str) -> bool {
         || tag.starts_with("sha256-")
         || tag.starts_with("0.0.0_")
         || !tag.contains('.')
+}
+
+pub async fn update(
+    installation: &Arc<Installation>,
+    tx: &MultiOutput,
+    updates: &Vec<Update>,
+) -> Result<()> {
+    let path = &installation.config_file;
+    let file = read_to_string(path)?;
+    let mut doc = nondestructive::yaml::from_slice(file)?;
+
+    let mut mapping = doc
+        .as_mut()
+        .into_mapping_mut()
+        .ok_or_else(|| anyhow::anyhow!("Not a mapping"))?;
+
+    let mut release_chart = mapping
+        .get_mut("release_chart")
+        .ok_or_else(|| anyhow::anyhow!("release_chart not found"))?;
+
+    let mut release_chart = release_chart
+        .as_mapping_mut()
+        .ok_or_else(|| anyhow::anyhow!("release_chart is not a mapping"))?;
+
+    for update in updates {
+        let name = update.name.as_str();
+        let value = update.value.as_str();
+        if let Some(mut field) = release_chart.get_mut(name) {
+            field.set_string(value);
+        } else {
+            return Err(anyhow::anyhow!("field {name} not found"));
+        }
+    }
+
+    let file = doc.to_string();
+    tx.send(Message::Log(log!(
+        Level::INFO,
+        &format!("Updating {path} to:\n{file}", path = path.display())
+    )))
+    .await;
+    std::fs::write(path, file)?;
+    Ok(())
 }
