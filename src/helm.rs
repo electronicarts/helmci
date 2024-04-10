@@ -7,11 +7,7 @@ use anyhow::Result;
 use semver::Version;
 use serde::Deserialize;
 use std::{
-    ffi::OsString,
-    fmt::{Debug, Display},
-    path::PathBuf,
-    sync::Arc,
-    time::Duration,
+    ffi::OsString, fmt::{Debug, Display}, path::PathBuf, sync::Arc, time::Duration
 };
 use tap::Pipe;
 use tracing::{debug, error};
@@ -491,6 +487,10 @@ async fn outdated_helm_chart(
     chart_version: &str,
     tx: &MultiOutput,
 ) -> Result<()> {
+    if is_ignorable_tag(chart_version) {
+        return Ok(());
+    }
+
     let chart_version = parse_version(chart_version)
         .map_err(|err| anyhow::anyhow!("Failed to parse version {chart_version:?} {err:?}"))?;
 
@@ -671,7 +671,7 @@ impl ParsedOci {
                     .json()
                     .await?;
 
-                get_latest_version_from_tags(tags)
+                get_latest_version_from_tags(path, tags)
                     .map_or_else(|| Err(anyhow::anyhow!("no versions found")), Ok)
             }
         }
@@ -686,9 +686,7 @@ async fn outdated_oci_chart(
     chart_version: &str,
     tx: &MultiOutput,
 ) -> Result<()> {
-    if chart_version.starts_with("0.0.0+") {
-        // Hack to skip charts that have git hash versions.
-        // We can't do anything with these.
+    if is_ignorable_tag(chart_version) {
         return Ok(());
     }
 
@@ -715,13 +713,7 @@ async fn outdated_oci_chart(
 /// Parse a semver complaint version.
 fn parse_version(tag: &str) -> Result<Version> {
     let tag = tag.strip_prefix('v').unwrap_or(tag);
-    let version = if tag.contains('.') {
-        Version::parse(tag)?
-    } else {
-        let tag = &format!("{tag}.0.0");
-        Version::parse(tag)?
-    };
-    Ok(version)
+    Version::parse(tag)?.pipe(Ok)
 }
 
 /// Get the latest version for the given `OciDetails`.
@@ -730,9 +722,12 @@ fn get_latest_version_from_details(details: OciDetails) -> Option<Version> {
     for image in details.image_details {
         if let Some(tags) = image.image_tags {
             for tag in tags {
+                if is_ignorable_tag(&tag) {
+                    continue;
+                }
                 match parse_version(&tag) {
                     Ok(version) => versions.push(version),
-                    Err(err) => error!("Cannot parse version {tag} {err}"),
+                    Err(err) => error!("Cannot parse version {} {tag}: {err}", image.repository_name),
                 }
             }
         }
@@ -743,15 +738,23 @@ fn get_latest_version_from_details(details: OciDetails) -> Option<Version> {
 }
 
 /// Get the latest version for the given `AwsTags`.
-fn get_latest_version_from_tags(tags: AwsTags) -> Option<Version> {
+fn get_latest_version_from_tags(path: &str, tags: AwsTags) -> Option<Version> {
     let mut versions = vec![];
     for tag in tags.tags {
+        if is_ignorable_tag(&tag) {
+            continue;
+        }
         match parse_version(&tag) {
             Ok(version) => versions.push(version),
-            Err(err) => error!("Cannot parse version {tag} {err}"),
+            Err(err) => error!("Cannot parse version {path} {tag}: {err}"),
         }
     }
 
     versions.sort();
     versions.last().cloned()
+}
+
+// Check if version is non semver compliant or legacy and should be ignored
+fn is_ignorable_tag(tag: &str) -> bool {
+    tag.starts_with("v0-") || tag.starts_with("sha256-") || tag.starts_with("0.0.0_") || !tag.contains('.')
 }
