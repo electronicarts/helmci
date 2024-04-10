@@ -36,7 +36,7 @@ use tokio::time::sleep_until;
 use tokio::time::Instant;
 
 const DEFAULT_RETRY: Duration = Duration::from_secs(5);
-const MAX_TRIES: u32 = 3;
+const MAX_TRIES: u32 = 8;
 
 pub struct SlackOutput {
     thread: Option<JoinHandle<()>>,
