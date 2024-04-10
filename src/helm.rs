@@ -645,7 +645,8 @@ impl ParsedOci {
                 let rc = match &result {
                     Ok(CommandSuccess { stdout, .. }) => {
                         let details: OciDetails = serde_json::from_str(stdout)?;
-                        get_latest_version_from_details(details).map_or_else(|| Err(anyhow::anyhow!("no versions found")), Ok)
+                        get_latest_version_from_details(details)
+                            .map_or_else(|| Err(anyhow::anyhow!("no versions found")), Ok)
                     }
                     Err(err) => Err(anyhow::anyhow!("The describe-images command failed: {err}")),
                 };
@@ -670,7 +671,8 @@ impl ParsedOci {
                     .json()
                     .await?;
 
-                get_latest_version_from_tags(tags).map_or_else(|| Err(anyhow::anyhow!("no versions found")), Ok)
+                get_latest_version_from_tags(tags)
+                    .map_or_else(|| Err(anyhow::anyhow!("no versions found")), Ok)
             }
         }
     }
