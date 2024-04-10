@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.3](https://github.com/electronicarts/helmci/compare/v0.4.2...v0.4.3) (2024-04-10)
+
+
+### Bug Fixes
+
+* Really remove openssl dependancy ([ad681b2](https://github.com/electronicarts/helmci/commit/ad681b25e10def93145fbfdc884ee5450625ecfa))
+
 ## [0.4.2](https://github.com/electronicarts/helmci/compare/v0.4.1...v0.4.2) (2024-04-10)
 
 
