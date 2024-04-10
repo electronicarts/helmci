@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.1](https://github.com/electronicarts/helmci/compare/v0.4.0...v0.4.1) (2024-04-10)
+
+
+### Bug Fixes
+
+* Add kludge if version is not symantic version ([3d95e07](https://github.com/electronicarts/helmci/commit/3d95e070b69112aeefb94f01dc35b11dd8d7d327))
+* Correct clippy warnings ([f77e45f](https://github.com/electronicarts/helmci/commit/f77e45ff42978ea390c2e2e10d8972981e4e0d07))
+* Correct code formatting ([ea83ce2](https://github.com/electronicarts/helmci/commit/ea83ce263d65f3b384db523d614eb3bbfa947c0d))
+* Don't display errors when legacy versions cannot be parsed ([3227f96](https://github.com/electronicarts/helmci/commit/3227f96481d8fab2f47d365c9dd6baf7a4fb7cf9))
+* Refactor Outdated command ([663d4e8](https://github.com/electronicarts/helmci/commit/663d4e815e35e1ad8b0a66aae037ff8bc2ad01b6))
+
 ## [0.4.0](https://github.com/electronicarts/helmci/compare/v0.3.3...v0.4.0) (2024-04-08)
 
 
