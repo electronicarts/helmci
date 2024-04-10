@@ -47,7 +47,7 @@ use crate::helm::HelmResult;
 use crate::helm::Installation;
 use crate::helm::InstallationId;
 use crate::layer::LogEntry;
-use crate::Task;
+use crate::Request;
 
 use super::Message;
 use super::Output;
@@ -119,12 +119,13 @@ fn ui<B: Backend>(f: &mut Frame<B>, state: &mut State) {
         (false, false, false) => Style::default(),
     };
 
-    let task = match state.task {
-        Some(Task::Diff) => "diff",
-        Some(Task::Upgrade) => "upgrade",
-        Some(Task::Test) => "test",
-        Some(Task::Template) => "template",
-        Some(Task::Outdated) => "outdated",
+    let task = match state.request.as_deref() {
+        Some(Request::Diff { .. }) => "diff",
+        Some(Request::Upgrade { .. }) => "upgrade",
+        Some(Request::Test { .. }) => "test",
+        Some(Request::Template { .. }) => "template",
+        Some(Request::Outdated { .. }) => "outdated",
+        Some(Request::Update { .. }) => "update",
         None => "unknown",
     };
 
@@ -392,7 +393,7 @@ impl HasMultilineText for Installation {
             key_value_space("Status", status),
             key_value_space("Duration", duration),
             key_value_space("Values", format!("{:?}", self.values_files)),
-            key_value_space("Chart", format!("{:?}", self.chart)),
+            key_value_space("Chart", format!("{:?}", self.chart_reference)),
             key_value_space("Depends", format!("{:?}", self.depends)),
             key_value_space("Timeout", self.timeout.to_string()),
         ];
@@ -530,7 +531,7 @@ impl Logs {
 }
 
 struct State {
-    task: Option<Task>,
+    request: Option<Arc<Request>>,
     start_instant: Option<Instant>,
     mode: DisplayMode,
     jobs: StatefulList<Arc<Installation>>,
@@ -549,7 +550,7 @@ struct State {
 impl State {
     fn new() -> State {
         State {
-            task: None,
+            request: None,
             start_instant: None,
             mode: DisplayMode::Installations,
             jobs: StatefulList::with_items(vec![], None),
@@ -714,7 +715,7 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
             state.logs.add_log(entry.clone());
         }
         Message::Start(task, start_instant) => {
-            state.task = Some(*task);
+            state.request = Some(task.clone());
             state.start_instant = Some(*start_instant);
         }
         Message::FinishedAll(result, duration) => {

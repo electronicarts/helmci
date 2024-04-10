@@ -12,9 +12,9 @@
 extern crate lazy_static;
 
 use std::collections::hash_map::Iter;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::str;
+use std::str::{self, FromStr};
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -23,6 +23,7 @@ use anyhow::{anyhow, Context};
 use clap::Parser;
 use clap::Subcommand;
 
+use futures::Future;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
@@ -56,75 +57,154 @@ mod duration;
 
 mod utils;
 
-/// What task was requested?
-#[derive(Copy, Clone, Debug)]
-pub enum Task {
-    /// Helm upgrade requested.
-    Upgrade,
-    /// Helm diff report requested.
-    Diff,
-    /// Helm tests requested.
-    Test,
-    /// Helm template requested.
-    Template,
-    /// Helm outdated report requested.
-    Outdated,
+/// An individual update
+#[derive(Clone, Debug)]
+pub struct Update {
+    /// The name of the value to change
+    pub name: String,
+    /// The new value to change to
+    pub value: String,
 }
 
-type Jobs = (Task, Vec<Arc<Installation>>);
+impl FromStr for Update {
+    type Err = anyhow::Error;
 
-fn get_required_repos(jobs: &Jobs, helm_repos: &HelmRepos) -> Vec<HelmRepo> {
-    let mut names = HashSet::new();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut split = s.splitn(2, '=');
+        let name = split
+            .next()
+            .ok_or_else(|| anyhow!("invalid update: {}", s))?
+            .to_string();
+        let value = split
+            .next()
+            .ok_or_else(|| anyhow!("invalid update: {}", s))?
+            .to_string();
+        Ok(Update { name, value })
+    }
+}
 
-    for installation in &jobs.1 {
-        if let HelmChart::HelmRepo { repo, .. } = &installation.chart {
-            names.insert(&repo.name);
+fn get_required_repos(todo: &[Arc<Installation>]) -> Vec<HelmRepo> {
+    let mut repos = HashMap::with_capacity(todo.len());
+    let mut next_id = 0;
+
+    for installation in todo {
+        if let ChartReference::Helm { repo_url, .. } = &installation.chart_reference {
+            repos.insert(
+                repo_url,
+                HelmRepo {
+                    name: format!("helm_{next_id}"),
+                    url: repo_url.clone(),
+                },
+            );
+            next_id += 1;
         }
     }
 
-    // Add these repos
-    let mut repos: Vec<HelmRepo> = Vec::with_capacity(names.len());
-    for repo in helm_repos.iter() {
-        if names.contains(&repo.name) {
-            repos.push(repo);
-        }
-    }
-
-    repos
+    repos.into_values().collect()
 }
 
-async fn helm_add_repos(repos: &[HelmRepo]) -> Result<()> {
+struct HelmReposLock(Vec<HelmRepo>, Option<oneshot::Sender<()>>);
+
+impl HelmReposLock {
+    fn get_helm_chart<'a>(&'a self, reference: &ChartReference) -> Result<HelmChart<'a>> {
+        match reference {
+            ChartReference::Helm {
+                repo_url,
+                chart_name,
+                chart_version,
+            } => {
+                let chart_name = chart_name.clone();
+                let chart_version = chart_version.clone();
+                let repo = self
+                    .0
+                    .iter()
+                    .find(|repo| repo.url == *repo_url)
+                    .ok_or_else(|| anyhow!("no such repo: {}", repo_url))?;
+                Ok(HelmChart::HelmRepo {
+                    repo,
+                    chart_name,
+                    chart_version,
+                })
+            }
+            ChartReference::Oci {
+                repo_url,
+                chart_name,
+                chart_version,
+            } => {
+                let chart_name = chart_name.clone();
+                let chart_version = chart_version.clone();
+                let repo_url = repo_url.clone();
+                Ok(HelmChart::OciRepo {
+                    repo_url,
+                    chart_name,
+                    chart_version,
+                })
+            }
+            ChartReference::Local { path } => Ok(HelmChart::Dir(path.clone())),
+        }
+    }
+}
+
+impl Drop for HelmReposLock {
+    fn drop(&mut self) {
+        // Send signal saying value has been dropped.
+        if let Some(sender) = self.1.take() {
+            if sender.send(()) == Err(()) {
+                error!("failed to send drop signal");
+            }
+        }
+    }
+}
+
+async fn with_helm_repos<T, FUT, FN>(repos: Vec<HelmRepo>, f: FN) -> Result<T>
+where
+    T: Sized + Send,
+    FUT: Future<Output = T> + Send,
+    FN: FnOnce(Arc<HelmReposLock>) -> FUT + Send,
+{
     // Add these repos
-    for repo in repos {
+    for repo in &repos {
         helm::add_repo(repo).await?;
     }
 
-    Ok(())
-}
+    let clone = repos.clone();
+    let (tx, rx) = oneshot::channel();
+    let lock = Arc::new(HelmReposLock(repos, Some(tx)));
 
-async fn helm_remove_repos_for_jobs(repos: &[HelmRepo]) -> Result<()> {
-    // Add these repos
-    for repo in repos {
+    let rc = f(lock).await;
+
+    // Because we sent value as Arc, it may still be in use.
+    // Wait for signal saying it has been dropped.
+    // Note: we must not be holding the lock value here!
+    rx.await?;
+
+    for repo in &clone {
         helm::remove_repo(repo).await?;
     }
 
-    Ok(())
+    Ok(rc)
 }
 
-async fn run_job(task: Task, installation: &Arc<Installation>, tx: &MultiOutput) -> Result<()> {
-    match task {
-        Task::Upgrade => {
-            helm::upgrade(installation, tx, true).await?;
-            helm::upgrade(installation, tx, false).await
+async fn run_job(
+    command: &Request,
+    helm_repos: &HelmReposLock,
+    installation: &Arc<Installation>,
+    tx: &MultiOutput,
+) -> Result<()> {
+    match command {
+        Request::Upgrade { .. } => {
+            helm::upgrade(installation, helm_repos, tx, true).await?;
+            helm::upgrade(installation, helm_repos, tx, false).await
         }
-        Task::Diff => helm::diff(installation, tx).await,
-        Task::Test => {
-            helm::outdated(installation, tx).await?;
+        Request::Diff { .. } => helm::diff(installation, helm_repos, tx).await,
+        Request::Test { .. } => {
+            helm::outdated(installation, helm_repos, tx).await?;
             helm::lint(installation, tx).await?;
-            helm::template(installation, tx).await
+            helm::template(installation, helm_repos, tx).await
         }
-        Task::Template => helm::template(installation, tx).await,
-        Task::Outdated => helm::outdated(installation, tx).await,
+        Request::Template { .. } => helm::template(installation, helm_repos, tx).await,
+        Request::Outdated { .. } => helm::outdated(installation, helm_repos, tx).await,
+        Request::Update { updates, .. } => helm::update(installation, tx, updates).await,
     }
 }
 
@@ -150,7 +230,7 @@ enum AutoState {
 #[clap(author, version, about, long_about = "Program to automate CI deploys")]
 struct Args {
     #[clap(subcommand)]
-    command: Commands,
+    command: Request,
 
     /// Filter releases to use based on env.
     #[clap(long, default_value = "*")]
@@ -177,37 +257,92 @@ struct Args {
     auto: AutoState,
 }
 
-#[derive(Subcommand, Debug)]
-enum Commands {
+#[derive(Subcommand, Debug, Clone)]
+enum Request {
     /// Upgrade/install releases.
     Upgrade {
         #[clap()]
-        charts: Vec<String>,
+        releases: Vec<String>,
     },
 
     /// Diff releases with current state.
     Diff {
         #[clap()]
-        charts: Vec<String>,
+        releases: Vec<String>,
     },
 
     /// Test releases.
     Test {
         #[clap()]
-        charts: Vec<String>,
+        releases: Vec<String>,
     },
 
     /// Generate template of releases.
     Template {
         #[clap()]
-        charts: Vec<String>,
+        releases: Vec<String>,
     },
 
     /// Generate outdated report of releases.
     Outdated {
         #[clap()]
-        charts: Vec<String>,
+        releases: Vec<String>,
     },
+
+    /// Update helm charts.
+    Update {
+        /// The expected chart type
+        chart_type: String,
+
+        /// The expected chart name
+        chart_name: String,
+
+        /// List of changes
+        updates: Vec<Update>,
+    },
+}
+
+impl Request {
+    const fn do_depends(&self) -> bool {
+        matches!(self, Self::Upgrade { .. })
+    }
+
+    const fn requires_helm_repos(&self) -> bool {
+        #![allow(clippy::match_same_arms)]
+        match self {
+            Self::Upgrade { .. } => true,
+            Self::Diff { .. } => true,
+            Self::Test { .. } => true,
+            Self::Template { .. } => true,
+            Self::Outdated { .. } => false,
+            Self::Update { .. } => false,
+        }
+    }
+
+    fn do_release(&self, release: &Release) -> bool {
+        match self {
+            Request::Upgrade { releases }
+            | Request::Diff { releases }
+            | Request::Test { releases }
+            | Request::Template { releases }
+            | Request::Outdated { releases } => {
+                releases.is_empty() || releases.contains(&release.name)
+            }
+            Request::Update {
+                chart_type,
+                chart_name,
+                ..
+            } => match &release.config.release_chart {
+                ChartReference::Helm {
+                    chart_name: name, ..
+                } => chart_type == "helm" && *chart_name == *name,
+                ChartReference::Oci {
+                    chart_name: name, ..
+                } => chart_type == "oci" && *chart_name == *name,
+                ChartReference::Local { .. } => false,
+            },
+        }
+    }
 }
 
 fn get_output(output_format: OutputFormat) -> Result<(Box<dyn Output>, Sender)> {
@@ -272,21 +407,16 @@ async fn main() -> Result<()> {
         .with_subscriber(Registry::default())
         .set_default();
 
-    // Work out what task we need to do.
-    let (task, installs) = match &args.command {
-        Commands::Upgrade { charts: installs } => (Task::Upgrade, installs),
-        Commands::Diff { charts: installs } => (Task::Diff, installs),
-        Commands::Test { charts: installs } => (Task::Test, installs),
-        Commands::Template { charts: installs } => (Task::Template, installs),
-        Commands::Outdated { charts: installs } => (Task::Outdated, installs),
-    };
+    let command = Arc::new(args.command.clone());
 
     // Send the Start message to output.
     let start = Instant::now();
-    output_pipe.send(Message::Start(task, start)).await;
+    output_pipe
+        .send(Message::Start(command.clone(), start))
+        .await;
 
     // Save the error for now so we can clean up.
-    let rc = do_task(task, &args, installs, &output_pipe).await;
+    let rc = do_task(command, &args, &output_pipe).await;
 
     // Log the error.
     if let Err(err) = &rc {
@@ -318,15 +448,10 @@ async fn main() -> Result<()> {
     rc
 }
 
-async fn do_task(
-    task: Task,
-    args: &Args,
-    list_release_names: &[String],
-    output: &output::MultiOutput,
-) -> Result<()> {
-    let mut helm_repos = HelmRepos::new();
+async fn do_task(command: Arc<Request>, args: &Args, output: &output::MultiOutput) -> Result<()> {
+    // let mut helm_repos = HelmRepos::new();
 
-    let (skipped_list, todo) = generate_todo(args, list_release_names, &mut helm_repos)?;
+    let (skipped_list, todo) = generate_todo(args, &command)?;
 
     let mut skipped = InstallationSet::new();
     for item in skipped_list {
@@ -334,49 +459,8 @@ async fn do_task(
         output.send(Message::SkippedJob(item)).await;
     }
 
-    let jobs: Jobs = (task, todo);
-    run_jobs_concurrently(jobs, output, skipped, &helm_repos).await
-}
-
-struct HelmRepos {
-    url_to_name: HashMap<String, String>,
-    next_id: u16,
-}
-
-impl HelmRepos {
-    fn new() -> HelmRepos {
-        HelmRepos {
-            url_to_name: HashMap::new(),
-            next_id: 0,
-        }
-    }
-
-    // fn get(&self, url: &str) -> Option<HelmRepo> {
-    //     let url = url.to_string();
-    //     self.url_to_name.get(&url).map(|name| HelmRepo {
-    //         name: name.clone(),
-    //         url,
-    //     })
-    // }
-
-    fn get_or_set(&mut self, url: &str) -> HelmRepo {
-        let url = url.to_string();
-        let name = if let Some(name) = self.url_to_name.get(&url) {
-            name.clone()
-        } else {
-            let name = format!("helm_{}", self.next_id);
-            self.url_to_name.insert(url.clone(), name.clone());
-            self.next_id += 1;
-            name
-        };
-        HelmRepo { name, url }
-    }
-
-    fn iter(&self) -> HelmIter {
-        HelmIter {
-            parent: self.url_to_name.iter(),
-        }
-    }
+    // let jobs: Jobs = (command, todo);
+    run_jobs_concurrently(command, todo, output, skipped).await
 }
 
 struct HelmIter<'a> {
@@ -399,8 +483,7 @@ type SkippedResult = Arc<Installation>;
 #[allow(clippy::cognitive_complexity)]
 fn generate_todo(
     args: &Args,
-    list_release_names: &[String],
-    helm_repos: &mut HelmRepos,
+    command: &Request,
 ) -> Result<(Vec<SkippedResult>, Vec<Arc<Installation>>), anyhow::Error> {
     let vdir = PathBuf::from(&args.vdir);
     let envs = Env::list_all_env(&vdir)
@@ -458,26 +541,22 @@ fn generate_todo(
                 format!("Cannot list releases from cluster {cluster_name} env {env_name}")
             })?;
             for release_dir_name in &all_releases {
-                let install = cluster
+                let release = cluster
                     .load_release(release_dir_name, &overrides)
                     .with_context(|| {
                         format!("Cannot load releases from cluster {cluster_name} env {env_name}")
                     })?;
-                trace!("Processing install {}", install.name);
+                trace!("Processing install {}", release.name);
 
                 let auto_skip = match args.auto {
-                    AutoState::Yes => !install.config.auto,
+                    AutoState::Yes => !release.config.auto,
                     AutoState::All => false,
                 };
 
                 // We also do skip entries if the install is to be skipped, these will be shown
-                let skip = (!list_release_names.is_empty()
-                    && !list_release_names.contains(&install.name))
-                    || install.config.locked
-                    || auto_skip;
+                let skip = !command.do_release(&release) || release.config.locked || auto_skip;
 
-                let installation =
-                    create_installation(&env, &cluster, install, next_id, helm_repos);
+                let installation = create_installation(&env, &cluster, release, next_id);
                 next_id = installation.id + 1;
 
                 if seen.contains(&installation) {
@@ -508,7 +587,7 @@ fn create_installation(
     cluster: &Cluster,
     release: Release,
     id: InstallationId,
-    helm_repos: &mut HelmRepos,
+    // helm_repos: &HelmRepos,
 ) -> Installation {
     let depends = release.config.depends.unwrap_or_default();
 
@@ -545,32 +624,7 @@ fn create_installation(
     }
 
     // Turn legacy config into new config
-    let release_chart = release.config.release_chart;
-
-    let chart = match release_chart {
-        ChartReference::Helm {
-            repo_url,
-            chart_name,
-            chart_version,
-        } => {
-            let repo = helm_repos.get_or_set(&repo_url);
-            HelmChart::HelmRepo {
-                repo,
-                chart_name,
-                chart_version,
-            }
-        }
-        ChartReference::Oci {
-            repo_url,
-            chart_name,
-            chart_version,
-        } => HelmChart::OciRepo {
-            repo_url,
-            chart_name,
-            chart_version,
-        },
-        ChartReference::Local { path } => HelmChart::Dir(path),
-    };
+    let chart_reference = release.config.release_chart;
 
     let announce_policy = release
         .config
@@ -579,12 +633,13 @@ fn create_installation(
 
     Installation {
         name: release.name,
+        config_file: release.config_file,
         namespace: release.config.namespace,
         env_name: env.name.clone(),
         cluster_name: cluster.name.clone(),
         context: cluster.config.context.clone(),
         values_files,
-        chart,
+        chart_reference,
         depends,
         timeout: release.config.timeout,
         id,
@@ -600,39 +655,60 @@ enum Dispatch {
     Done(HashIndex),
 }
 
-fn is_ok(skip_depends: bool, some_i: Option<&Arc<Installation>>, done: &InstallationSet) -> bool {
-    some_i.map_or(false, |i| skip_depends || is_depends_ok(i, done))
+fn is_ok(do_depends: bool, some_i: Option<&Arc<Installation>>, done: &InstallationSet) -> bool {
+    some_i.map_or(false, |i| !do_depends || is_depends_ok(i, done))
 }
 
 async fn run_jobs_concurrently(
-    jobs: Jobs,
+    request: Arc<Request>,
+    todo: Vec<Arc<Installation>>,
     output: &output::MultiOutput,
     skipped: InstallationSet,
-    helm_repos: &HelmRepos,
 ) -> Result<()> {
-    let required_repos = get_required_repos(&jobs, helm_repos);
-    helm_add_repos(&required_repos).await?;
+    let required_repos = if request.requires_helm_repos() {
+        get_required_repos(&todo)
+    } else {
+        vec![]
+    };
 
-    let skip_depends = !matches!(jobs.0, Task::Upgrade | Task::Test);
-    let task = jobs.0;
+    let rc = with_helm_repos(required_repos, |repos| async {
+        run_jobs_concurrently_with_repos(request, todo, output, skipped, repos).await
+    })
+    .await;
 
-    for job in &jobs.1 {
-        output.send(Message::NewJob(job.clone())).await;
+    rc?
+}
+
+async fn run_jobs_concurrently_with_repos(
+    request: Arc<Request>,
+    todo: Vec<Arc<Installation>>,
+    output: &output::MultiOutput,
+    skipped: InstallationSet,
+    helm_repos: Arc<HelmReposLock>,
+) -> Result<()> {
+    let do_depends = request.do_depends();
+    // let skip_depends = !matches!(jobs.0, Task::Upgrade | Task::Test);
+    // let task = jobs.0.clone();
+
+    for i in &todo {
+        output.send(Message::NewJob(i.clone())).await;
     }
 
     // This process receives requests for jobs and dispatches them
     let (tx_dispatch, rx_dispatch) = mpsc::channel(10);
     let dispatch =
-        tokio::spawn(
-            async move { dispatch_thread(jobs, skipped, rx_dispatch, skip_depends).await },
-        );
+        tokio::spawn(async move { dispatch_thread(todo, skipped, rx_dispatch, do_depends).await });
 
     // The actual worker threads
     let threads: Vec<JoinHandle<Result<()>>> = (0..NUM_THREADS)
         .map(|_| {
             let tx_dispatch = tx_dispatch.clone();
             let output = output.clone();
-            tokio::spawn(async move { worker_thread(task, &tx_dispatch, &output).await })
+            let request = request.clone();
+            let helm_repos = helm_repos.clone();
+            tokio::spawn(async move {
+                worker_thread(&request, &helm_repos, &tx_dispatch, &output).await
+            })
         })
         .collect();
 
@@ -655,9 +731,6 @@ async fn run_jobs_concurrently(
             }
         }
     }
-
-    // When worker threads done we can drop the helm repos
-    helm_remove_repos_for_jobs(&required_repos).await?;
 
     trace!("Waiting for dispatch thread");
     let rc = dispatch.await;
@@ -685,12 +758,12 @@ async fn run_jobs_concurrently(
 }
 
 async fn dispatch_thread(
-    jobs: (Task, Vec<Arc<Installation>>),
+    todo: Vec<Arc<Installation>>,
     skipped: InstallationSet,
     mut rx_dispatch: mpsc::Receiver<Dispatch>,
-    skip_depends: bool,
+    do_depends: bool,
 ) -> Result<(), anyhow::Error> {
-    let mut installations: Vec<Option<&Arc<Installation>>> = jobs.1.iter().map(Some).collect();
+    let mut installations: Vec<Option<&Arc<Installation>>> = todo.iter().map(Some).collect();
     let mut done = skipped;
     while let Some(msg) = rx_dispatch.recv().await {
         match msg {
@@ -698,7 +771,7 @@ async fn dispatch_thread(
                 // Search for first available installation that meets dependancies.
                 let some_i = installations
                     .iter_mut()
-                    .find(|i| is_ok(skip_depends, **i, &done))
+                    .find(|i| is_ok(do_depends, **i, &done))
                     .and_then(std::option::Option::take)
                     .map(std::borrow::ToOwned::to_owned);
 
@@ -726,7 +799,8 @@ async fn dispatch_thread(
 }
 
 async fn worker_thread(
-    task: Task,
+    command: &Request,
+    helm_repos: &HelmReposLock,
     tx_dispatch: &mpsc::Sender<Dispatch>,
     output: &MultiOutput,
 ) -> Result<()> {
@@ -749,7 +823,7 @@ async fn worker_thread(
             .await;
 
         // Execute the job
-        let result = run_job(task, &install, output).await;
+        let result = run_job(command, helm_repos, &install, output).await;
         match &result {
             Ok(()) => {
                 // Tell dispatcher job is done so it can update the dependancies

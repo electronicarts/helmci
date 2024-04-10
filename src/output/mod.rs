@@ -12,7 +12,7 @@ use tokio::{sync::mpsc, time::Instant};
 use crate::{
     helm::{HelmResult, Installation},
     layer::LogEntry,
-    Task,
+    Request,
 };
 
 pub mod slack;
@@ -39,7 +39,7 @@ pub enum Message {
     Log(LogEntry),
 
     /// This gets sent at very start.
-    Start(Task, Instant),
+    Start(Arc<Request>, Instant),
     /// This gets sent when all jobs declared finished, but UI should wait for socket to close before ending.
     FinishedAll(Result<(), String>, Duration),
 }
