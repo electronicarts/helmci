@@ -507,7 +507,7 @@ async fn outdated_helm_chart(
 
     if let Ok(CommandSuccess { stdout, .. }) = &result {
         let version: Vec<HelmVersionInfo> = serde_json::from_str(stdout)?;
-        let version = version.get(0).ok_or_else(|| {
+        let version = version.first().ok_or_else(|| {
             anyhow::anyhow!("No version information found for chart {chart_name}")
         })?;
         let version = parse_version(&version.version)
@@ -515,7 +515,7 @@ async fn outdated_helm_chart(
 
         tx.send(Message::InstallationVersion(
             installation.clone(),
-            chart_version.to_owned(),
+            chart_version,
             version,
         ))
         .await;
@@ -644,12 +644,8 @@ impl ParsedOci {
 
                 let rc = match &result {
                     Ok(CommandSuccess { stdout, .. }) => {
-                        let details: OciDetails = serde_json::from_str(&stdout)?;
-                        if let Some(version) = get_latest_version_from_details(details) {
-                            Ok(version)
-                        } else {
-                            Err(anyhow::anyhow!("no versions found"))
-                        }
+                        let details: OciDetails = serde_json::from_str(stdout)?;
+                        get_latest_version_from_details(details).map_or_else(|| Err(anyhow::anyhow!("no versions found")), Ok)
                     }
                     Err(err) => Err(anyhow::anyhow!("The describe-images command failed: {err}")),
                 };
@@ -667,17 +663,14 @@ impl ParsedOci {
                     .await?;
 
                 let tags: AwsTags = reqwest::Client::new()
-                    .get(&format!("https://public.ecr.aws/v2/{}/tags/list", path))
+                    .get(&format!("https://public.ecr.aws/v2/{path}/tags/list"))
                     .header("Authorization", format!("Bearer {}", token.token))
                     .send()
                     .await?
                     .json()
                     .await?;
 
-                match get_latest_version_from_tags(tags) {
-                    Some(version) => Ok(version),
-                    None => Err(anyhow::anyhow!("no versions found")),
-                }
+                get_latest_version_from_tags(tags).map_or_else(|| Err(anyhow::anyhow!("no versions found")), Ok)
             }
         }
     }
@@ -704,7 +697,7 @@ async fn outdated_oci_chart(
     let parsed = ParsedOci::new(&url, chart_name)?;
 
     let latest_version = parsed
-        .get_latest_version(installation, &tx)
+        .get_latest_version(installation, tx)
         .await
         .map_err(|err| anyhow::anyhow!("Get latest version failed {err:?}"))?;
     tx.send(Message::InstallationVersion(

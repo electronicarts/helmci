@@ -37,7 +37,7 @@ macro_rules! log {
     };
 }
 
-pub(crate) use log;
+pub use log;
 
 /// Create a log entry object.
 pub fn raw_log(level: Level, name: impl Into<String>, message: impl Into<String>) -> LogEntry {
