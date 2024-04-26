@@ -109,9 +109,6 @@ pub enum AnnouncePolicy {
 /// Retrieved from `./envs/$env/$cluster/$release_dir/config.yaml`.
 #[derive(Deserialize, Debug)]
 pub struct ReleaseConfig {
-    #[serde(alias = "charts-version")]
-    pub charts_version: Option<String>,
-
     pub auto: bool,
     pub locked: bool,
     pub namespace: String,
