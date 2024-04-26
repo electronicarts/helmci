@@ -11,6 +11,20 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use crate::utils::filename_to_string;
 
+
+#[derive(Deserialize, Debug)]
+pub enum ValuesFormat {
+    PlainText,
+    Vals,
+    Sops,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ValuesFile {
+    pub path: PathBuf,
+    pub format: ValuesFormat,
+}
+
 /// A Env config file.
 ///
 /// Retrieved from `./envs/$env/config.yaml`.
@@ -93,7 +107,7 @@ pub enum AnnouncePolicy {
 /// A release config file.
 ///
 /// Retrieved from `./envs/$env/$cluster/$release_dir/config.yaml`.
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Deserialize, Debug)]
 pub struct ReleaseConfig {
     #[serde(alias = "charts-version")]
     pub charts_version: Option<String>,
@@ -106,6 +120,14 @@ pub struct ReleaseConfig {
     pub release_chart: ChartReference,
     pub depends: Option<Vec<ReleaseReference>>,
     pub announce_policy: Option<AnnouncePolicy>,
+
+    /// These files are processed first have have lowest priority.
+    #[serde(default)]
+    pub base_values_files: Vec<ValuesFile>,
+
+    /// These files are processed last and have highest priority.
+    #[serde(default)]
+    pub override_values_files: Vec<ValuesFile>,
 }
 
 /// Parsed details concerning an Env.

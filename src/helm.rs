@@ -21,7 +21,7 @@ use url::Url;
 
 use crate::{
     command::{CommandLine, CommandResult, CommandSuccess},
-    config::{AnnouncePolicy, ChartReference, ReleaseReference},
+    config::{AnnouncePolicy, ChartReference, ReleaseReference, ValuesFile, ValuesFormat},
     output::{Message, MultiOutput},
     HelmReposLock, Update,
 };
@@ -59,19 +59,6 @@ fn aws_path() -> OsString {
 
 /// A unique identifier for an installation.
 pub type InstallationId = u16;
-
-#[derive(Debug)]
-pub enum ValuesFormat {
-    PlainText,
-    Vals,
-    Sops,
-}
-
-#[derive(Debug)]
-pub struct ValuesFile {
-    pub path: PathBuf,
-    pub format: ValuesFormat,
-}
 
 /// All the information required for an helm release to be processed.
 #[derive(Debug)]

@@ -35,7 +35,7 @@ use tracing_subscriber::{Layer, Registry};
 mod command;
 
 mod helm;
-use helm::{HelmChart, Installation, ValuesFile, ValuesFormat};
+use helm::{HelmChart, Installation};
 use helm::{HelmRepo, InstallationId};
 
 mod depends;
@@ -45,7 +45,7 @@ mod output;
 use output::{Message, MultiOutput, Output, Sender};
 
 mod config;
-use config::Overrides;
+use config::{Overrides, ValuesFile, ValuesFormat};
 use config::Release;
 use config::{ChartReference, Cluster, Env};
 
@@ -587,11 +587,20 @@ fn create_installation(
     cluster: &Cluster,
     release: Release,
     id: InstallationId,
-    // helm_repos: &HelmRepos,
 ) -> Installation {
     let depends = release.config.depends.unwrap_or_default();
 
     let mut values_files: Vec<ValuesFile> = vec![];
+
+    for base_values_file in release.config.base_values_files {
+        let path = release.dir.join(&base_values_file.path);
+        let values_file = ValuesFile {
+            path,
+            format: base_values_file.format,
+        };
+        values_files.push(values_file);
+    }
+
     let values_file = release.dir.join("values.yaml");
     if values_file.is_file() {
         values_files.push(ValuesFile {
@@ -607,20 +616,13 @@ fn create_installation(
         });
     }
 
-    let encrypted_file = release.dir.join("secrets.sops.yaml");
-    if encrypted_file.is_file() {
-        values_files.push(ValuesFile {
-            path: encrypted_file,
-            format: ValuesFormat::Sops,
-        });
-    }
-
-    let encrypted_file = release.dir.join("secrets.vals.yaml");
-    if encrypted_file.is_file() {
-        values_files.push(ValuesFile {
-            path: encrypted_file,
-            format: ValuesFormat::Vals,
-        });
+    for override_values_file in release.config.override_values_files {
+        let path = release.dir.join(&override_values_file.path);
+        let values_file = ValuesFile {
+            path,
+            format: override_values_file.format,
+        };
+        values_files.push(values_file);
     }
 
     // Turn legacy config into new config
