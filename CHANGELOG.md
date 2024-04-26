@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.0](https://github.com/electronicarts/helmci/compare/v0.4.3...v0.5.0) (2024-04-26)
+
+
+### Features
+
+* Add support for shared values files. ([025b99b](https://github.com/electronicarts/helmci/commit/025b99bcf302f12cf54c0c8c3c67daa97140d520))
+* Support writing config changes ([b500e6b](https://github.com/electronicarts/helmci/commit/b500e6b6398235c3763836a10eb8e449f5da07b2))
+
+
+### Bug Fixes
+
+* Delete legacy chart_version config value ([007c56a](https://github.com/electronicarts/helmci/commit/007c56a252716449b2529c253b3c0a7f9e0967f5))
+* Increase max slack retries to 8 after rate limit error ([a7f8258](https://github.com/electronicarts/helmci/commit/a7f8258e2a7ce82c25d97644c8f1cc58bda8a7d6))
+* Run cargo fmt ([8cb8898](https://github.com/electronicarts/helmci/commit/8cb8898fa17b77d8cdd5ff03439d4b71aefd5f61))
+
 ## [0.4.3](https://github.com/electronicarts/helmci/compare/v0.4.2...v0.4.3) (2024-04-10)
 
 
