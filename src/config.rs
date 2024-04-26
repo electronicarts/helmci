@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use crate::utils::filename_to_string;
 
-
 #[derive(Deserialize, Debug)]
 pub enum ValuesFormat {
     PlainText,

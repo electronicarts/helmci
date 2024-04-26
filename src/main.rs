@@ -45,9 +45,9 @@ mod output;
 use output::{Message, MultiOutput, Output, Sender};
 
 mod config;
-use config::{Overrides, ValuesFile, ValuesFormat};
 use config::Release;
 use config::{ChartReference, Cluster, Env};
+use config::{Overrides, ValuesFile, ValuesFormat};
 
 mod layer;
 use layer::log;
