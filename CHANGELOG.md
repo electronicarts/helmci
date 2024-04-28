@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/electronicarts/helmci/compare/v0.5.0...v0.5.1) (2024-04-28)
+
+
+### Bug Fixes
+
+* Outdated command requires helm repos to be initialized ([09c5c83](https://github.com/electronicarts/helmci/commit/09c5c83f0e74538fd78603a9cc74cdb9390c1723))
+
 ## [0.5.0](https://github.com/electronicarts/helmci/compare/v0.4.3...v0.5.0) (2024-04-26)
 
 
