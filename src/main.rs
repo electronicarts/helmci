@@ -314,7 +314,7 @@ impl Request {
             Self::Diff { .. } => true,
             Self::Test { .. } => true,
             Self::Template { .. } => true,
-            Self::Outdated { .. } => false,
+            Self::Outdated { .. } => true,
             Self::Update { .. } => false,
         }
     }
