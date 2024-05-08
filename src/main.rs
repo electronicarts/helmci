@@ -11,7 +11,6 @@
 
 extern crate lazy_static;
 
-use std::collections::hash_map::Iter;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::{self, FromStr};
@@ -461,21 +460,6 @@ async fn do_task(command: Arc<Request>, args: &Args, output: &output::MultiOutpu
 
     // let jobs: Jobs = (command, todo);
     run_jobs_concurrently(command, todo, output, skipped).await
-}
-
-struct HelmIter<'a> {
-    parent: Iter<'a, String, String>,
-}
-
-impl<'a> Iterator for HelmIter<'a> {
-    type Item = HelmRepo;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.parent.next().map(|(url, name)| HelmRepo {
-            name: name.clone(),
-            url: url.clone(),
-        })
-    }
 }
 
 type SkippedResult = Arc<Installation>;
