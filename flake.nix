@@ -3,6 +3,7 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
+    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay.url = "github:oxalica/rust-overlay";
     crane = {
@@ -18,6 +19,11 @@
         pkgs = import nixpkgs {
           inherit system;
           overlays = [ (import rust-overlay) ];
+        };
+        pkgs_unstable = import nixpkgs-unstable {
+          inherit system;
+          # required for helm-secrets
+          config.allowUnfree = true;
         };
 
         osxlibs = pkgs.lib.lists.optionals pkgs.stdenv.isDarwin [
@@ -70,7 +76,7 @@
         helm = pkgs.wrapHelm pkgs.kubernetes-helm {
           plugins = [
             pkgs.kubernetes-helmPlugins.helm-diff
-            pkgs.kubernetes-helmPlugins.helm-secrets
+            pkgs_unstable.kubernetes-helmPlugins.helm-secrets
           ];
           extraMakeWrapperArgs =
             "--set HELM_SECRETS_SOPS_PATH ${sops}/bin/sops --set HELM_SECRETS_VALS_PATH ${vals}/bin/vals";
@@ -87,9 +93,15 @@
         rustSrcPlatform =
           rustPlatform.override { extensions = [ "rust-src" ]; };
         workspaceShell = pkgs.mkShell {
-          buildInputs =
-            [ pkgs.rust-analyzer rustSrcPlatform helm awscli sops vals gnupg ]
-            ++ osxlibs;
+          buildInputs = [
+            pkgs_unstable.rust-analyzer
+            rustSrcPlatform
+            helm
+            awscli
+            sops
+            vals
+            gnupg
+          ] ++ osxlibs;
         };
 
       in rec {
