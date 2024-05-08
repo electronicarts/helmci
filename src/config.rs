@@ -158,7 +158,7 @@ impl Env {
 
         let file: String = std::fs::read_to_string(&config_file)
             .with_context(|| format!("Reading file {}", config_file.display()))?;
-        let config: EnvConfig = serde_yaml::from_str(&file)
+        let config: EnvConfig = serde_yml::from_str(&file)
             .with_context(|| format!("Parsing file {}", config_file.display()))?;
 
         Ok(Env {
@@ -212,7 +212,7 @@ impl Env {
 
         let file: String = std::fs::read_to_string(&config_file)
             .with_context(|| format!("Reading file {}", config_file.display()))?;
-        let config: ClusterConfig = serde_yaml::from_str(&file)
+        let config: ClusterConfig = serde_yml::from_str(&file)
             .with_context(|| format!("Parsing file {}", config_file.display()))?;
 
         Ok(Cluster {
@@ -225,7 +225,7 @@ impl Env {
 }
 
 impl Cluster {
-    /// List all releaseses for a cluster.
+    /// List all releases for a cluster.
     pub fn list_all_releases(&self) -> Result<Vec<String>> {
         let dir = &self.dir;
         let mut result = vec![];
@@ -250,7 +250,7 @@ impl Cluster {
 
         let file: String = std::fs::read_to_string(&config_file)
             .with_context(|| format!("Reading file {}", config_file.display()))?;
-        let mut config: ReleaseConfig = serde_yaml::from_str(&file)
+        let mut config: ReleaseConfig = serde_yml::from_str(&file)
             .with_context(|| format!("Parsing file {}", config_file.display()))?;
 
         if let Some(reference) = overrides.releases.get(&config.release) {
@@ -277,7 +277,7 @@ impl Overrides {
     pub fn load(path: &Path) -> Result<Self> {
         let file: String = std::fs::read_to_string(path)
             .with_context(|| format!("Reading file {}", path.display()))?;
-        let config: Overrides = serde_yaml::from_str(&file)
+        let config: Overrides = serde_yml::from_str(&file)
             .with_context(|| format!("Parsing file {}", path.display()))?;
 
         Ok(config)
@@ -293,7 +293,7 @@ mod tests {
         #![allow(clippy::unwrap_used)]
 
         let str = "'Hello/World'".to_string();
-        let result: ReleaseReference = serde_yaml::from_str(&str).unwrap();
+        let result: ReleaseReference = serde_yml::from_str(&str).unwrap();
         assert_eq!(result.namespace, "Hello");
         assert_eq!(result.name, "World");
     }
@@ -306,7 +306,7 @@ mod tests {
             namespace: "Hello".to_string(),
             name: "World".to_string(),
         };
-        let result = serde_yaml::to_string(&r).unwrap();
+        let result = serde_yml::to_string(&r).unwrap();
         assert_eq!(result, "Hello/World\n");
     }
 }
