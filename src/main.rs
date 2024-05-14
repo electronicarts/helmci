@@ -251,6 +251,9 @@ struct Args {
     #[clap(long, value_enum)]
     output: Vec<OutputFormat>,
 
+    #[clap(long)]
+    release_filter: Vec<ReleaseFilter>,
+
     /// Should we process releases that have auto set to false?
     #[clap(long, value_enum, default_value_t=AutoState::Yes)]
     auto: AutoState,
@@ -259,46 +262,77 @@ struct Args {
 #[derive(Subcommand, Debug, Clone)]
 enum Request {
     /// Upgrade/install releases.
-    Upgrade {
-        #[clap()]
-        releases: Vec<String>,
-    },
+    Upgrade {},
 
     /// Diff releases with current state.
-    Diff {
-        #[clap()]
-        releases: Vec<String>,
-    },
+    Diff {},
 
     /// Test releases.
-    Test {
-        #[clap()]
-        releases: Vec<String>,
-    },
+    Test {},
 
     /// Generate template of releases.
-    Template {
-        #[clap()]
-        releases: Vec<String>,
-    },
+    Template {},
 
     /// Generate outdated report of releases.
-    Outdated {
-        #[clap()]
-        releases: Vec<String>,
-    },
+    Outdated {},
 
     /// Update helm charts.
     Update {
-        /// The expected chart type
-        chart_type: String,
-
-        /// The expected chart name
-        chart_name: String,
-
         /// List of changes
         updates: Vec<Update>,
     },
+}
+
+#[derive(Clone, Debug)]
+enum ReleaseFilter {
+    ChartType(String),
+    ChartName(String),
+    ReleaseName(String),
+}
+
+impl FromStr for ReleaseFilter {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut split = s.splitn(2, '=');
+        let key = split
+            .next()
+            .ok_or_else(|| anyhow!("invalid filter: {}", s))?
+            .to_string();
+        let value = split
+            .next()
+            .ok_or_else(|| anyhow!("invalid filter: {}", s))?
+            .to_string();
+        match key.as_str() {
+            "chart_type" => Ok(ReleaseFilter::ChartType(value)),
+            "chart_name" => Ok(ReleaseFilter::ChartName(value)),
+            "release_name" => Ok(ReleaseFilter::ReleaseName(value)),
+            _ => Err(anyhow!("invalid filter key: {}", key)),
+        }
+    }
+}
+
+impl ReleaseFilter {
+    fn matches(&self, release: &Release) -> bool {
+        #[allow(clippy::match_same_arms)]
+        match self {
+            Self::ChartType(chart_type) => match &release.config.release_chart {
+                ChartReference::Helm { .. } => chart_type == "helm",
+                ChartReference::Oci { .. } => chart_type == "oci",
+                ChartReference::Local { .. } => chart_type == "local",
+            },
+            Self::ChartName(chart_name) => match &release.config.release_chart {
+                ChartReference::Helm {
+                    chart_name: name, ..
+                } => chart_name == name,
+                ChartReference::Oci {
+                    chart_name: name, ..
+                } => chart_name == name,
+                ChartReference::Local { .. } => false,
+            },
+            Self::ReleaseName(release_name) => release.name == *release_name,
+        }
+    }
 }
 
 impl Request {
@@ -315,31 +349,6 @@ impl Request {
             Self::Template { .. } => true,
             Self::Outdated { .. } => true,
             Self::Update { .. } => false,
-        }
-    }
-
-    fn do_release(&self, release: &Release) -> bool {
-        match self {
-            Request::Upgrade { releases }
-            | Request::Diff { releases }
-            | Request::Test { releases }
-            | Request::Template { releases }
-            | Request::Outdated { releases } => {
-                releases.is_empty() || releases.contains(&release.name)
-            }
-            Request::Update {
-                chart_type,
-                chart_name,
-                ..
-            } => match &release.config.release_chart {
-                ChartReference::Helm {
-                    chart_name: name, ..
-                } => chart_type == "helm" && *chart_name == *name,
-                ChartReference::Oci {
-                    chart_name: name, ..
-                } => chart_type == "oci" && *chart_name == *name,
-                ChartReference::Local { .. } => false,
-            },
         }
     }
 }
@@ -450,7 +459,7 @@ async fn main() -> Result<()> {
 async fn do_task(command: Arc<Request>, args: &Args, output: &output::MultiOutput) -> Result<()> {
     // let mut helm_repos = HelmRepos::new();
 
-    let (skipped_list, todo) = generate_todo(args, &command)?;
+    let (skipped_list, todo) = generate_todo(args)?;
 
     let mut skipped = InstallationSet::new();
     for item in skipped_list {
@@ -467,7 +476,6 @@ type SkippedResult = Arc<Installation>;
 #[allow(clippy::cognitive_complexity)]
 fn generate_todo(
     args: &Args,
-    command: &Request,
 ) -> Result<(Vec<SkippedResult>, Vec<Arc<Installation>>), anyhow::Error> {
     let vdir = PathBuf::from(&args.vdir);
     let envs = Env::list_all_env(&vdir)
@@ -538,7 +546,12 @@ fn generate_todo(
                 };
 
                 // We also do skip entries if the install is to be skipped, these will be shown
-                let skip = !command.do_release(&release) || release.config.locked || auto_skip;
+                let skip = args
+                    .release_filter
+                    .iter()
+                    .any(|filter| !filter.matches(&release))
+                    || release.config.locked
+                    || auto_skip;
 
                 let installation = create_installation(&env, &cluster, release, next_id);
                 next_id = installation.id + 1;
