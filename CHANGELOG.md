@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.0.0](https://github.com/electronicarts/helmci/compare/v0.5.1...v1.0.0) (2024-05-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* Command line is different; probably shouldn't affect anything other then my scripts.
+
+### Features
+
+* Refactor release filter command line ([74a0c48](https://github.com/electronicarts/helmci/commit/74a0c4845ade1e8caa799cc16642160e74242e18))
+
+
+### Bug Fixes
+
+* Remove legacy HelmIter ([4f87759](https://github.com/electronicarts/helmci/commit/4f877591669d4d82ad55b03e2ff394d7523a9bab))
+
 ## [0.5.1](https://github.com/electronicarts/helmci/compare/v0.5.0...v0.5.1) (2024-04-28)
 
 
