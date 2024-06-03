@@ -336,7 +336,7 @@ impl SlackState {
 
             let title = slack_title(state);
             let markdown = SlackBlockPlainTextOnly::from(title.clone());
-            let heading = SlackHeaderBlock::new(markdown.into());
+            let heading = SlackHeaderBlock::new(markdown);
             blocks.push(heading.into());
 
             for (installation, status) in data {
@@ -381,7 +381,7 @@ impl SlackState {
 
         let title = slack_title(state);
         let markdown = SlackBlockPlainTextOnly::from(title.clone());
-        let heading = SlackHeaderBlock::new(markdown.into());
+        let heading = SlackHeaderBlock::new(markdown);
         blocks.push(heading.into());
 
         let cmd = match &hr.result {
@@ -446,7 +446,7 @@ fn get_installation_blocks(state: &State, title: &str) -> Vec<SlackBlock> {
     let status = ["```".to_string(), status, "```".to_string()];
     let status = status.join("\n");
     let markdown = SlackBlockPlainTextOnly::from(title);
-    let heading = SlackHeaderBlock::new(markdown.into());
+    let heading = SlackHeaderBlock::new(markdown);
     let markdown = SlackBlockMarkDownText::new(status);
     let block = SlackSectionBlock::new().with_text(markdown.into());
     let blocks = slack_blocks![some_into(heading), some_into(block)];
@@ -462,7 +462,7 @@ fn get_outdated_blocks(state: &State) -> Vec<SlackBlock> {
         let status = ["```".to_string(), status, "```".to_string()];
         let status = status.join("\n");
         let markdown = SlackBlockPlainTextOnly::from(title);
-        let heading = SlackHeaderBlock::new(markdown.into());
+        let heading = SlackHeaderBlock::new(markdown);
         let markdown = SlackBlockMarkDownText::new(status);
         let block = SlackSectionBlock::new().with_text(markdown.into());
         let blocks = slack_blocks![some_into(heading), some_into(block)];
