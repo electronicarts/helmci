@@ -1111,9 +1111,9 @@ dependencies = [
 
 [[package]]
 name = "nondestructive"
-version = "0.0.22"
+version = "0.0.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d6bbf45c9b1c0f355d79d88eba6dc7b367e283cdf33f1f89eb8f89257568b01"
+checksum = "df8c6dda9b7e104ebb1ff495a2c95c9c14bf9ef285328f08617ed2170c681196"
 dependencies = [
  "bstr",
  "itoa",
