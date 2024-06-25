@@ -16,6 +16,7 @@
         "oneshot",
         "refs",
         "requestor",
+        "rustls",
         "splitn",
         "sqlpad",
         "Swatinem",

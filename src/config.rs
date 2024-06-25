@@ -130,7 +130,6 @@ pub struct ReleaseConfig {
 pub struct Env {
     pub name: String,
     pub dir: PathBuf,
-    pub config_file: PathBuf,
     pub config: EnvConfig,
 }
 
@@ -138,7 +137,6 @@ pub struct Env {
 pub struct Cluster {
     pub name: String,
     pub dir: PathBuf,
-    pub config_file: PathBuf,
     pub config: ClusterConfig,
 }
 
@@ -164,7 +162,6 @@ impl Env {
         Ok(Env {
             name: name.to_string(),
             dir: all_envs_dir,
-            config_file,
             config,
         })
     }
@@ -218,7 +215,6 @@ impl Env {
         Ok(Cluster {
             name: name.to_string(),
             dir,
-            config_file,
             config,
         })
     }
