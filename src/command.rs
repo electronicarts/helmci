@@ -22,6 +22,7 @@ pub struct CommandSuccess {
     pub stdout: String,
     pub stderr: String,
     pub duration: Duration,
+    pub exit_code: i32, // This field stores the exit code of the command to determine if it was successful or not, and whether or not there were any diffs.
 }
 
 impl CommandSuccess {
@@ -189,6 +190,7 @@ impl CommandLine {
                 cmd: self.clone(),
                 stdout,
                 stderr,
+                exit_code,
                 duration,
             }),
             Err(kind) => Err(CommandError {

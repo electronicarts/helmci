@@ -56,6 +56,7 @@ mod duration;
 
 mod utils;
 
+
 /// An individual update
 #[derive(Clone, Debug)]
 pub struct Update {
@@ -184,26 +185,61 @@ where
     Ok(rc)
 }
 
+// Define the possible results of a job.
+enum JobResult {
+    Unit, // Represents a unit result.
+    Diff(helm::DiffResult), // Represents a diff result.
+}
+
+// Asynchronously run a job based on the provided command.
 async fn run_job(
-    command: &Request,
-    helm_repos: &HelmReposLock,
-    installation: &Arc<Installation>,
-    tx: &MultiOutput,
-) -> Result<()> {
+    command: &Request, // The command to execute.
+    helm_repos: &HelmReposLock, // The helm repositories lock.
+    installation: &Arc<Installation>, // The installation details.
+    tx: &MultiOutput, // The multi-output channel.
+) -> Result<JobResult> {
     match command {
+        // Handle the Upgrade request.
         Request::Upgrade { .. } => {
+            // Run the helm diff command.
+            let diff_result = helm::diff(installation, helm_repos, tx).await?;
+            // Check the exit code of the diff command.
+            if diff_result._exit_code == 0 || diff_result._exit_code == 2 {
+                // If no changes or only changes detected, return Unit.
+                return Ok(JobResult::Unit);
+            }
+            // Perform a dry-run upgrade.
             helm::upgrade(installation, helm_repos, tx, true).await?;
-            helm::upgrade(installation, helm_repos, tx, false).await
+            // Perform the actual upgrade.
+            helm::upgrade(installation, helm_repos, tx, false).await?;
+            // Return Unit result.
+            Ok(JobResult::Unit)
         }
-        Request::Diff { .. } => helm::diff(installation, helm_repos, tx).await,
+        // Handle the Diff request.
+        Request::Diff { .. } => {
+            // Run the helm diff command.
+            let diff_result = helm::diff(installation, helm_repos, tx).await?;
+            // Return the diff result.
+            Ok(JobResult::Diff(helm::DiffResult { _exit_code: diff_result._exit_code }))
+        },
         Request::Test { .. } => {
             helm::outdated(installation, helm_repos, tx).await?;
             helm::lint(installation, tx).await?;
-            helm::template(installation, helm_repos, tx).await
+            helm::template(installation, helm_repos, tx).await?;
+            Ok(JobResult::Unit)
         }
-        Request::Template { .. } => helm::template(installation, helm_repos, tx).await,
-        Request::Outdated { .. } => helm::outdated(installation, helm_repos, tx).await,
-        Request::Update { updates, .. } => helm::update(installation, tx, updates).await,
+        Request::Template { .. } => {
+            helm::template(installation, helm_repos, tx).await?;
+            Ok(JobResult::Unit)
+        }
+        Request::Outdated { .. } => {
+            helm::outdated(installation, helm_repos, tx).await?;
+            Ok(JobResult::Unit)
+        }
+        Request::Update { updates, .. } => {
+            helm::update(installation, tx, updates).await?;
+            Ok(JobResult::Unit)
+        }
     }
 }
 
@@ -824,8 +860,15 @@ async fn worker_thread(
         // Execute the job
         let result = run_job(command, helm_repos, &install, output).await;
         match &result {
-            Ok(()) => {
-                // Tell dispatcher job is done so it can update the dependancies
+            Ok(JobResult::Unit) => {
+                // Handle the unit case
+                tx_dispatch
+                    .send(Dispatch::Done(HashIndex::get_hash_index(&install)))
+                    .await?;
+            }
+            Ok(JobResult::Diff(helm::DiffResult { _exit_code })) => {
+                // Handle the diff result case
+                // You might want to log or process the diff_result here
                 tx_dispatch
                     .send(Dispatch::Done(HashIndex::get_hash_index(&install)))
                     .await?;
@@ -846,7 +889,7 @@ async fn worker_thread(
         output
             .send(Message::FinishedJob(
                 install.clone(),
-                result.map_err(|err| err.to_string()),
+                result.map(|_| ()).map_err(|err| err.to_string()),
                 stop - start,
             ))
             .await;
