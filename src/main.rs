@@ -220,8 +220,10 @@ async fn run_job(
             // Run the helm diff command.
             let diff_result = helm::diff(installation, helm_repos, tx).await?;
             // Return the diff result.
-            Ok(JobResult::Diff(helm::DiffResult { _exit_code: diff_result._exit_code }))
-        },
+            Ok(JobResult::Diff(helm::DiffResult {
+                _exit_code: diff_result._exit_code,
+            }))
+        }
         Request::Test { .. } => {
             helm::outdated(installation, helm_repos, tx).await?;
             helm::lint(installation, tx).await?;
