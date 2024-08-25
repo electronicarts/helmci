@@ -118,6 +118,8 @@ pub struct HelmResult {
     pub installation: Arc<Installation>,
     pub result: CommandResult,
     pub command: Command,
+    // The exit code contains information about whether there were any diffs.
+    pub _exit_code: i32,
 }
 
 impl HelmResult {
@@ -130,6 +132,7 @@ impl HelmResult {
             installation: installation.clone(),
             result,
             command,
+            _exit_code: 0,
         }
     }
 
@@ -366,20 +369,29 @@ pub async fn template(
     }
 }
 
+// The DiffResult struct is used to store the exit code of the diff command.
+pub struct DiffResult {
+    pub _exit_code: i32,
+}
+
 /// Run the helm diff command.
 pub async fn diff(
     installation: &Arc<Installation>,
     helm_repos: &HelmReposLock,
     tx: &MultiOutput,
-) -> Result<()> {
+) -> Result<DiffResult> {
+    // Retrieve the helm chart for the given installation.
     let chart = helm_repos.get_helm_chart(&installation.chart_reference)?;
+    // Get the chart arguments from the chart.
     let (chart, mut chart_args) = get_args_from_chart(&chart);
 
+    // Construct the arguments for the helm diff command.
     let mut args = vec![
         "diff".into(),
         "upgrade".into(),
         installation.name.clone().into(),
         chart,
+        "--detailed-exitcode".into(), // This flag ensures that the exit code will indicate if there are changes or errors.
         "--context=3".into(),
         "--no-color".into(),
         "--allow-unreleased".into(),
@@ -389,22 +401,52 @@ pub async fn diff(
         installation.clone().context.clone().into(),
     ];
 
+    // Append additional arguments from the installation configuration.
     args.append(&mut add_values_files(installation));
     args.append(&mut chart_args);
     args.append(&mut get_template_parameters(installation));
 
+    // Create a CommandLine instance with the helm path and the constructed arguments.
     let command_line = CommandLine(helm_path(), args);
+    // Run the command and await the result.
     let result = command_line.run().await;
-    let has_errors = result.is_err();
-    let i_result = HelmResult::from_result(installation, result, Command::Diff);
+    // Check if there were any errors in the command execution.
+    let _has_errors = result.is_err();
+    // Create a HelmResult instance from the command result.
+    let mut i_result = HelmResult::from_result(installation, result, Command::Diff);
+
+    // Evaluate the detailed exit code - any non-zero exit code indicates changes (1) or errors (2).
+    let exit_code = if let Ok(command_success) = &i_result.result {
+        i_result._exit_code = command_success.exit_code;
+        match command_success.exit_code {
+            0 => {
+                debug!("No changes detected!"); // Exit code 0 indicates no changes.
+                0
+            }
+            1 => {
+                debug!("Errors encountered!"); // Exit code 1 indicates errors.
+                1
+            }
+            2 => {
+                debug!("Changes detected!"); // Exit code 2 indicates changes.
+                2
+            }
+            _ => {
+                debug!("Unknown exit code"); // Any other exit code is considered unknown.
+                -1
+            }
+        }
+    } else {
+        debug!("Other error encountered"); // If the command result is an error, return -1.
+        -1
+    };
+
+    // Wrap the HelmResult in an Arc and send it via the MultiOutput channel.
     let i_result = Arc::new(i_result);
     tx.send(Message::InstallationResult(i_result)).await;
 
-    if has_errors {
-        Err(anyhow::anyhow!("diff operation failed"))
-    } else {
-        Ok(())
-    }
+    // Return the exit code. Errors are no longer considered a failure and can be handled by the caller.
+    Ok(DiffResult { _exit_code: exit_code })
 }
 
 /// Run the helm upgrade command.

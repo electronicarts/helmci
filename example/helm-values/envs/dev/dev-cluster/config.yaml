@@ -1,2 +1,2 @@
-context: dev-cluster
+context: minikube
 locked: false
