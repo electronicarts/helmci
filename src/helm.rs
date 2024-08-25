@@ -447,7 +447,7 @@ pub async fn diff(
 
     // Return the exit code. Errors are no longer considered a failure and can be handled by the caller.
     Ok(DiffResult { 
-        _exit_code: exit_code 
+        _exit_code: exit_code,
     })
 }
 
