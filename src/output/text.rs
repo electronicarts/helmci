@@ -216,7 +216,7 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
                 command,
                 result,
                 installation,
-                _exit_code // This field is not used in this function, but it is part of the HelmResult struct.
+                _exit_code, // This field is not used in this function, but it is part of the HelmResult struct.
             } = hr.as_ref();
             let result_str = hr.result_line();
 
