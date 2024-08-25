@@ -56,7 +56,6 @@ mod duration;
 
 mod utils;
 
-
 /// An individual update
 #[derive(Clone, Debug)]
 pub struct Update {

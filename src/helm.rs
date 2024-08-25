@@ -446,7 +446,7 @@ pub async fn diff(
     tx.send(Message::InstallationResult(i_result)).await;
 
     // Return the exit code. Errors are no longer considered a failure and can be handled by the caller.
-    Ok(DiffResult { 
+    Ok(DiffResult {
         _exit_code: exit_code,
     })
 }
