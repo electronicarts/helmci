@@ -193,10 +193,10 @@ enum JobResult {
 
 // Asynchronously run a job based on the provided command.
 async fn run_job(
-    command: &Request, // The command to execute.
-    helm_repos: &HelmReposLock, // The helm repositories lock.
+    command: &Request,                // The command to execute.
+    helm_repos: &HelmReposLock,       // The helm repositories lock.
     installation: &Arc<Installation>, // The installation details.
-    tx: &MultiOutput, // The multi-output channel.
+    tx: &MultiOutput,                 // The multi-output channel.
 ) -> Result<JobResult> {
     match command {
         // Handle the Upgrade request.
