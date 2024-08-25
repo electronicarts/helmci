@@ -187,7 +187,7 @@ where
 
 // Define the possible results of a job.
 enum JobResult {
-    Unit, // Represents a unit result.
+    Unit,                   // Represents a unit result.
     Diff(helm::DiffResult), // Represents a diff result.
 }
 
