@@ -36,6 +36,7 @@ mod command;
 mod helm;
 use helm::{HelmChart, Installation};
 use helm::{HelmRepo, InstallationId};
+use helm::DiffResult;
 
 mod depends;
 use depends::{is_depends_ok, HashIndex, InstallationSet};
@@ -184,62 +185,49 @@ where
     Ok(rc)
 }
 
-// Define the possible results of a job.
-enum JobResult {
-    Unit,                   // Represents a unit result.
-    Diff(helm::DiffResult), // Represents a diff result.
-}
-
-// Asynchronously run a job based on the provided command.
 async fn run_job(
-    command: &Request,                // The command to execute.
-    helm_repos: &HelmReposLock,       // The helm repositories lock.
-    installation: &Arc<Installation>, // The installation details.
-    tx: &MultiOutput,                 // The multi-output channel.
-) -> Result<JobResult> {
+    command: &Request,
+    helm_repos: &HelmReposLock,
+    installation: &Arc<Installation>,
+    tx: &MultiOutput,
+) -> Result<()> {
     match command {
-        // Handle the Upgrade request.
         Request::Upgrade { .. } => {
-            // Run the helm diff command.
             let diff_result = helm::diff(installation, helm_repos, tx).await?;
-            // Check the exit code of the diff command.
-            if diff_result._exit_code == 0 || diff_result._exit_code == 2 {
-                // If no changes or only changes detected, return Unit.
-                return Ok(JobResult::Unit);
+            match diff_result {
+                DiffResult::NoChanges | DiffResult::Changes => {
+                    // If no changes or only changes detected, return Unit.
+                    return Ok(());
+                }
+                DiffResult::Errors | DiffResult::Unknown => {
+                    // Handle errors or unknown cases if needed.
+                }
             }
-            // Perform a dry-run upgrade.
             helm::upgrade(installation, helm_repos, tx, true).await?;
-            // Perform the actual upgrade.
             helm::upgrade(installation, helm_repos, tx, false).await?;
-            // Return Unit result.
-            Ok(JobResult::Unit)
+            Ok(())
         }
-        // Handle the Diff request.
         Request::Diff { .. } => {
-            // Run the helm diff command.
-            let diff_result = helm::diff(installation, helm_repos, tx).await?;
-            // Return the diff result.
-            Ok(JobResult::Diff(helm::DiffResult {
-                _exit_code: diff_result._exit_code,
-            }))
+            helm::diff(installation, helm_repos, tx).await?;
+            Ok(())
         }
         Request::Test { .. } => {
             helm::outdated(installation, helm_repos, tx).await?;
             helm::lint(installation, tx).await?;
             helm::template(installation, helm_repos, tx).await?;
-            Ok(JobResult::Unit)
+            Ok(())
         }
         Request::Template { .. } => {
             helm::template(installation, helm_repos, tx).await?;
-            Ok(JobResult::Unit)
+            Ok(())
         }
         Request::Outdated { .. } => {
             helm::outdated(installation, helm_repos, tx).await?;
-            Ok(JobResult::Unit)
+            Ok(())
         }
         Request::Update { updates, .. } => {
             helm::update(installation, tx, updates).await?;
-            Ok(JobResult::Unit)
+            Ok(())
         }
     }
 }
@@ -861,15 +849,7 @@ async fn worker_thread(
         // Execute the job
         let result = run_job(command, helm_repos, &install, output).await;
         match &result {
-            Ok(JobResult::Unit) => {
-                // Handle the unit case
-                tx_dispatch
-                    .send(Dispatch::Done(HashIndex::get_hash_index(&install)))
-                    .await?;
-            }
-            Ok(JobResult::Diff(helm::DiffResult { _exit_code })) => {
-                // Handle the diff result case
-                // You might want to log or process the diff_result here
+            Ok(()) => {
                 tx_dispatch
                     .send(Dispatch::Done(HashIndex::get_hash_index(&install)))
                     .await?;
