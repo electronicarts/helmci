@@ -210,7 +210,7 @@ async fn run_job(
                         io::stdin().read_line(&mut input).unwrap();
                         let input = input.trim().to_lowercase();
 
-                        if input == 'Y' || input == "y" || input == "yes" || input == "" {
+                        if input == "Y" || input == "y" || input == "yes" || input == "" {
                             helm::upgrade(installation, helm_repos, tx, true).await?;
                             helm::upgrade(installation, helm_repos, tx, false).await?;
                         }
