@@ -22,7 +22,9 @@
         };
         pkgs_unstable = import nixpkgs-unstable {
           inherit system;
-          # required for helm-secrets
+          # Required for helm-secrets:
+          # This will not be required anymore after 24.11 is released,
+          # See https://github.com/NixOS/nixpkgs/issues/309976
           config.allowUnfree = true;
         };
 
