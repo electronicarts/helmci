@@ -12,7 +12,7 @@
 extern crate lazy_static;
 
 use std::collections::HashMap;
-use std::io::{self, Write};
+use std::io::{self};
 use std::path::PathBuf;
 use std::str::{self, FromStr};
 use std::sync::Arc;
@@ -207,13 +207,15 @@ async fn run_job(
                         } // bypass_assume_no is an implicit case
                     } else {
                         print!("No changes detected. Upgrade anyway? (Y/n): ");
-                        io::stdout().flush().unwrap();
 
                         let mut input = String::new();
-                        io::stdin().read_line(&mut input).unwrap();
+                        if let Err(e) = io::stdin().read_line(&mut input) {
+                            eprintln!("Failed to read input: {e}");
+                            return Err(anyhow::anyhow!("Failed to read input"));
+                        }
                         let input = input.trim().to_lowercase();
 
-                        if input == "y" || input == "yes" || input == "" {
+                        if input == "y" || input == "yes" || input.is_empty() {
                             helm::upgrade(installation, helm_repos, tx, true).await?;
                             helm::upgrade(installation, helm_repos, tx, false).await?;
                         }
@@ -975,7 +977,7 @@ async fn worker_thread(
         output
             .send(Message::FinishedJob(
                 install.clone(),
-                result.map(|_| ()).map_err(|err| err.to_string()),
+                result.map_err(|err| err.to_string()),
                 stop - start,
             ))
             .await;
