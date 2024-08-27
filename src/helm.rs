@@ -376,6 +376,9 @@ pub enum DiffResult {
     Errors,
     Unknown,
 }
+async fn log_debug_message(tx: &MultiOutput, message: &str) {
+    tx.send(Message::Log(log!(Level::DEBUG, message))).await;
+}
 
 /// Run the helm diff command.
 pub async fn diff(
@@ -423,24 +426,24 @@ pub async fn diff(
         i_result.exit_code = command_success.exit_code;
         match command_success.exit_code {
             0 => {
-                debug!("No changes detected!"); // Exit code 0 indicates no changes.
+                log_debug_message(tx, "No changes detected!").await; // Exit code 0 indicates no changes.
                 DiffResult::NoChanges
             }
             1 => {
-                debug!("Errors encountered!"); // Exit code 1 indicates errors.
+                log_debug_message(tx, "Errors encountered!").await; // Exit code 1 indicates errors.
                 DiffResult::Errors
             }
             2 => {
-                debug!("Changes detected!"); // Exit code 2 indicates changes.
+                log_debug_message(tx, "Changes detected!").await; // Exit code 2 indicates changes.
                 DiffResult::Changes
             }
             _ => {
-                debug!("Unknown exit code"); // Any other exit code is considered unknown.
+                log_debug_message(tx, "Unknown exit code").await; // Any other exit code is considered unknown.
                 DiffResult::Unknown
             }
         }
     } else {
-        debug!("Other exception encountered"); // If the command result is an error, return Unknown.
+        log_debug_message(tx, "Other exception encountered").await; // If the command result is an error, return Unknown.
         DiffResult::Unknown
     };
 

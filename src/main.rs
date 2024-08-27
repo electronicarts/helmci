@@ -12,7 +12,6 @@
 extern crate lazy_static;
 
 use std::collections::HashMap;
-use std::io::{self};
 use std::path::PathBuf;
 use std::str::{self, FromStr};
 use std::sync::Arc;
@@ -211,23 +210,8 @@ async fn run_job(
                             helm::upgrade(installation, helm_repos, tx, true).await?;
                             helm::upgrade(installation, helm_repos, tx, false).await?;
                         }
-                        UpgradeControl::BypassAndAssumeNo => {
-                            // Do nothing, as bypass_assume_no is an implicit case
-                        }
-                        UpgradeControl::Normal => {
-                            print!("No changes detected. Upgrade anyway? (Y/n): ");
-
-                            let mut input = String::new();
-                            if let Err(e) = io::stdin().read_line(&mut input) {
-                                eprintln!("Failed to read input: {e}");
-                                return Err(anyhow::anyhow!("Failed to read input"));
-                            }
-                            let input = input.trim().to_lowercase();
-
-                            if input == "y" || input == "yes" || input.is_empty() {
-                                helm::upgrade(installation, helm_repos, tx, true).await?;
-                                helm::upgrade(installation, helm_repos, tx, false).await?;
-                            }
+                        UpgradeControl::BypassAndAssumeNo | UpgradeControl::Normal => {
+                            // Do nothing, as these are implicit or default cases
                         }
                     }
                 }
