@@ -118,6 +118,8 @@ pub struct HelmResult {
     pub installation: Arc<Installation>,
     pub result: CommandResult,
     pub command: Command,
+    // The exit code contains information about whether there were any diffs.
+    pub exit_code: i32,
 }
 
 impl HelmResult {
@@ -130,6 +132,7 @@ impl HelmResult {
             installation: installation.clone(),
             result,
             command,
+            exit_code: 0,
         }
     }
 
@@ -366,20 +369,35 @@ pub async fn template(
     }
 }
 
+// The DiffResult struct is used to store the exit code of the diff command.
+pub enum DiffResult {
+    NoChanges,
+    Changes,
+    Errors,
+    Unknown,
+}
+async fn log_debug_message(tx: &MultiOutput, message: &str) {
+    tx.send(Message::Log(log!(Level::DEBUG, message))).await;
+}
+
 /// Run the helm diff command.
 pub async fn diff(
     installation: &Arc<Installation>,
     helm_repos: &HelmReposLock,
     tx: &MultiOutput,
-) -> Result<()> {
+) -> Result<DiffResult> {
+    // Retrieve the helm chart for the given installation.
     let chart = helm_repos.get_helm_chart(&installation.chart_reference)?;
+    // Get the chart arguments from the chart.
     let (chart, mut chart_args) = get_args_from_chart(&chart);
 
+    // Construct the arguments for the helm diff command.
     let mut args = vec![
         "diff".into(),
         "upgrade".into(),
         installation.name.clone().into(),
         chart,
+        "--detailed-exitcode".into(), // This flag ensures that the exit code will indicate if there are changes or errors.
         "--context=3".into(),
         "--no-color".into(),
         "--allow-unreleased".into(),
@@ -389,22 +407,52 @@ pub async fn diff(
         installation.clone().context.clone().into(),
     ];
 
+    // Append additional arguments from the installation configuration.
     args.append(&mut add_values_files(installation));
     args.append(&mut chart_args);
     args.append(&mut get_template_parameters(installation));
 
+    // Create a CommandLine instance with the helm path and the constructed arguments.
     let command_line = CommandLine(helm_path(), args);
+    // Run the command and await the result.
     let result = command_line.run().await;
-    let has_errors = result.is_err();
-    let i_result = HelmResult::from_result(installation, result, Command::Diff);
+    // Check if there were any errors in the command execution.
+    let _has_errors = result.is_err();
+    // Create a HelmResult instance from the command result.
+    let mut i_result = HelmResult::from_result(installation, result, Command::Diff);
+
+    // Evaluate the detailed exit code - any non-zero exit code indicates changes (1) or errors (2).
+    let diff_result = if let Ok(command_success) = &i_result.result {
+        i_result.exit_code = command_success.exit_code;
+        match command_success.exit_code {
+            0 => {
+                log_debug_message(tx, "No changes detected!").await; // Exit code 0 indicates no changes.
+                DiffResult::NoChanges
+            }
+            1 => {
+                log_debug_message(tx, "Errors encountered!").await; // Exit code 1 indicates errors.
+                DiffResult::Errors
+            }
+            2 => {
+                log_debug_message(tx, "Changes detected!").await; // Exit code 2 indicates changes.
+                DiffResult::Changes
+            }
+            _ => {
+                log_debug_message(tx, "Unknown exit code").await; // Any other exit code is considered unknown.
+                DiffResult::Unknown
+            }
+        }
+    } else {
+        log_debug_message(tx, "Other exception encountered").await; // If the command result is an error, return Unknown.
+        DiffResult::Unknown
+    };
+
+    // Wrap the HelmResult in an Arc and send it via the MultiOutput channel.
     let i_result = Arc::new(i_result);
     tx.send(Message::InstallationResult(i_result)).await;
 
-    if has_errors {
-        Err(anyhow::anyhow!("diff operation failed"))
-    } else {
-        Ok(())
-    }
+    // Return the diff result.
+    Ok(diff_result)
 }
 
 /// Run the helm upgrade command.

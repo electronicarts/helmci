@@ -34,6 +34,7 @@ use tracing_subscriber::{Layer, Registry};
 mod command;
 
 mod helm;
+use helm::DiffResult;
 use helm::{HelmChart, Installation};
 use helm::{HelmRepo, InstallationId};
 
@@ -63,6 +64,14 @@ pub struct Update {
     pub name: String,
     /// The new value to change to
     pub value: String,
+}
+
+/// For command line options, we need to control the upgrade process.
+#[derive(Clone, Copy)] // Add Clone and Copy traits
+enum UpgradeControl {
+    BypassAndAssumeYes,
+    BypassAndAssumeNo,
+    Normal,
 }
 
 impl FromStr for Update {
@@ -189,21 +198,55 @@ async fn run_job(
     helm_repos: &HelmReposLock,
     installation: &Arc<Installation>,
     tx: &MultiOutput,
+    upgrade_control: &UpgradeControl,
 ) -> Result<()> {
     match command {
         Request::Upgrade { .. } => {
-            helm::upgrade(installation, helm_repos, tx, true).await?;
-            helm::upgrade(installation, helm_repos, tx, false).await
+            let diff_result = helm::diff(installation, helm_repos, tx).await?;
+            match diff_result {
+                DiffResult::NoChanges => {
+                    match upgrade_control {
+                        UpgradeControl::BypassAndAssumeYes => {
+                            helm::upgrade(installation, helm_repos, tx, true).await?;
+                            helm::upgrade(installation, helm_repos, tx, false).await?;
+                        }
+                        UpgradeControl::BypassAndAssumeNo | UpgradeControl::Normal => {
+                            // Do nothing, as these are implicit or default cases
+                        }
+                    }
+                }
+                DiffResult::Changes => {
+                    helm::upgrade(installation, helm_repos, tx, true).await?;
+                    helm::upgrade(installation, helm_repos, tx, false).await?;
+                }
+                DiffResult::Errors | DiffResult::Unknown => {
+                    // Handle errors or unknown cases if needed.
+                }
+            }
+            Ok(())
         }
-        Request::Diff { .. } => helm::diff(installation, helm_repos, tx).await,
+        Request::Diff { .. } => {
+            helm::diff(installation, helm_repos, tx).await?;
+            Ok(())
+        }
         Request::Test { .. } => {
             helm::outdated(installation, helm_repos, tx).await?;
             helm::lint(installation, tx).await?;
-            helm::template(installation, helm_repos, tx).await
+            helm::template(installation, helm_repos, tx).await?;
+            Ok(())
         }
-        Request::Template { .. } => helm::template(installation, helm_repos, tx).await,
-        Request::Outdated { .. } => helm::outdated(installation, helm_repos, tx).await,
-        Request::Update { updates, .. } => helm::update(installation, tx, updates).await,
+        Request::Template { .. } => {
+            helm::template(installation, helm_repos, tx).await?;
+            Ok(())
+        }
+        Request::Outdated { .. } => {
+            helm::outdated(installation, helm_repos, tx).await?;
+            Ok(())
+        }
+        Request::Update { updates, .. } => {
+            helm::update(installation, tx, updates).await?;
+            Ok(())
+        }
     }
 }
 
@@ -262,7 +305,17 @@ struct Args {
 #[derive(Subcommand, Debug, Clone)]
 enum Request {
     /// Upgrade/install releases.
-    Upgrade {},
+    Upgrade {
+        /// Bypass skip upgrade on no changes.
+        #[clap(long, short = 'b')]
+        bypass_skip_upgrade_on_no_changes: bool,
+        /// Assume yes or no.
+        #[clap(long, short = 'y', conflicts_with = "no", default_value_t = false)]
+        yes: bool,
+        /// Assume no.
+        #[clap(long, short = 'n', conflicts_with = "yes", default_value_t = false)]
+        no: bool,
+    },
 
     /// Diff releases with current state.
     Diff {},
@@ -380,6 +433,28 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
     let args = Args::parse();
 
+    // Extract the bypass_skip_upgrade_on_no_changes and bypass_assume_yes flags if the command is Upgrade
+    let upgrade_control = if let Request::Upgrade {
+        bypass_skip_upgrade_on_no_changes,
+        yes,
+        no,
+    } = args.command
+    {
+        if bypass_skip_upgrade_on_no_changes {
+            if yes {
+                UpgradeControl::BypassAndAssumeYes
+            } else if no {
+                UpgradeControl::BypassAndAssumeNo
+            } else {
+                UpgradeControl::Normal
+            }
+        } else {
+            UpgradeControl::Normal
+        }
+    } else {
+        UpgradeControl::Normal
+    };
+
     let output_types = if args.output.is_empty() {
         vec![OutputFormat::Text]
     } else {
@@ -424,7 +499,7 @@ async fn main() -> Result<()> {
         .await;
 
     // Save the error for now so we can clean up.
-    let rc = do_task(command, &args, &output_pipe).await;
+    let rc = do_task(command, &args, &output_pipe, upgrade_control).await;
 
     // Log the error.
     if let Err(err) = &rc {
@@ -456,7 +531,12 @@ async fn main() -> Result<()> {
     rc
 }
 
-async fn do_task(command: Arc<Request>, args: &Args, output: &output::MultiOutput) -> Result<()> {
+async fn do_task(
+    command: Arc<Request>,
+    args: &Args,
+    output: &output::MultiOutput,
+    upgrade_control: UpgradeControl,
+) -> Result<()> {
     // let mut helm_repos = HelmRepos::new();
 
     let (skipped_list, todo) = generate_todo(args)?;
@@ -468,7 +548,7 @@ async fn do_task(command: Arc<Request>, args: &Args, output: &output::MultiOutpu
     }
 
     // let jobs: Jobs = (command, todo);
-    run_jobs_concurrently(command, todo, output, skipped).await
+    run_jobs_concurrently(command, todo, output, skipped, &upgrade_control).await
 }
 
 type SkippedResult = Arc<Installation>;
@@ -663,15 +743,16 @@ async fn run_jobs_concurrently(
     todo: Vec<Arc<Installation>>,
     output: &output::MultiOutput,
     skipped: InstallationSet,
+    upgrade_control: &UpgradeControl,
 ) -> Result<()> {
     let required_repos = if request.requires_helm_repos() {
         get_required_repos(&todo)
     } else {
         vec![]
     };
-
     let rc = with_helm_repos(required_repos, |repos| async {
-        run_jobs_concurrently_with_repos(request, todo, output, skipped, repos).await
+        run_jobs_concurrently_with_repos(request, todo, output, skipped, repos, *upgrade_control)
+            .await
     })
     .await;
 
@@ -684,6 +765,7 @@ async fn run_jobs_concurrently_with_repos(
     output: &output::MultiOutput,
     skipped: InstallationSet,
     helm_repos: Arc<HelmReposLock>,
+    upgrade_control: UpgradeControl,
 ) -> Result<()> {
     let do_depends = request.do_depends();
     // let skip_depends = !matches!(jobs.0, Task::Upgrade | Task::Test);
@@ -706,7 +788,14 @@ async fn run_jobs_concurrently_with_repos(
             let request = request.clone();
             let helm_repos = helm_repos.clone();
             tokio::spawn(async move {
-                worker_thread(&request, &helm_repos, &tx_dispatch, &output).await
+                worker_thread(
+                    &request,
+                    &helm_repos,
+                    &tx_dispatch,
+                    &output,
+                    &upgrade_control,
+                )
+                .await
             })
         })
         .collect();
@@ -802,6 +891,7 @@ async fn worker_thread(
     helm_repos: &HelmReposLock,
     tx_dispatch: &mpsc::Sender<Dispatch>,
     output: &MultiOutput,
+    upgrade_control: &UpgradeControl,
 ) -> Result<()> {
     let mut errors = false;
 
@@ -822,10 +912,9 @@ async fn worker_thread(
             .await;
 
         // Execute the job
-        let result = run_job(command, helm_repos, &install, output).await;
+        let result = run_job(command, helm_repos, &install, output, upgrade_control).await;
         match &result {
             Ok(()) => {
-                // Tell dispatcher job is done so it can update the dependancies
                 tx_dispatch
                     .send(Dispatch::Done(HashIndex::get_hash_index(&install)))
                     .await?;
