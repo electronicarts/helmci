@@ -193,6 +193,7 @@ async fn run_job(
     tx: &MultiOutput,
     bypass_skip_upgrade_on_no_changes: bool,
     bypass_assume_yes: bool,
+    bypass_assume_no: bool,
 ) -> Result<()> {
     match command {
         Request::Upgrade { .. } => {
@@ -200,24 +201,21 @@ async fn run_job(
             match diff_result {
                 DiffResult::NoChanges => {
                     if bypass_skip_upgrade_on_no_changes {
-                        helm::upgrade(installation, helm_repos, tx, true).await?;
-                        helm::upgrade(installation, helm_repos, tx, false).await?;
-                    } else {
                         if bypass_assume_yes {
                             helm::upgrade(installation, helm_repos, tx, true).await?;
                             helm::upgrade(installation, helm_repos, tx, false).await?;
-                        } else {
-                            print!("No changes detected. Upgrade anyway? (Y/n): ");
-                            io::stdout().flush().unwrap();
+                        } // bypass_assume_no is an implicit case
+                    } else {
+                        print!("No changes detected. Upgrade anyway? (Y/n): ");
+                        io::stdout().flush().unwrap();
 
-                            let mut input = String::new();
-                            io::stdin().read_line(&mut input).unwrap();
-                            let input = input.trim().to_lowercase();
+                        let mut input = String::new();
+                        io::stdin().read_line(&mut input).unwrap();
+                        let input = input.trim().to_lowercase();
 
-                            if input == "Y" || input == "y" || input == "yes" || input == "" {
-                                helm::upgrade(installation, helm_repos, tx, true).await?;
-                                helm::upgrade(installation, helm_repos, tx, false).await?;
-                            }
+                        if input == "y" || input == "yes" || input == "" {
+                            helm::upgrade(installation, helm_repos, tx, true).await?;
+                            helm::upgrade(installation, helm_repos, tx, false).await?;
                         }
                     }
                 }
@@ -315,9 +313,12 @@ enum Request {
         /// Bypass skip upgrade on no changes.
         #[clap(long, short = 'b')]
         bypass_skip_upgrade_on_no_changes: bool,
-        /// Assume yes at the prompt.
-        #[clap(long, short = 'y')]
+        /// Assume yes or no.
+        #[clap(long, short = 'y', conflicts_with = "no", default_value_t = false)]
         yes: bool,
+        /// Assume no.
+        #[clap(long, short = 'n', conflicts_with = "yes", default_value_t = false)]
+        no: bool,
     },
 
     /// Diff releases with current state.
@@ -437,14 +438,15 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     // Extract the bypass_skip_upgrade_on_no_changes and bypass_assume_yes flags if the command is Upgrade
-    let (bypass_skip_upgrade_on_no_changes, bypass_assume_yes) = if let Request::Upgrade {
+    let (bypass_skip_upgrade_on_no_changes, bypass_assume_yes, bypass_assume_no) = if let Request::Upgrade {
         bypass_skip_upgrade_on_no_changes,
         yes,
+        no,
     } = args.command
     {
-        (bypass_skip_upgrade_on_no_changes, yes)
+        (bypass_skip_upgrade_on_no_changes, yes, no)
     } else {
-        (false, false)
+        (false, false, false)
     };
 
     let output_types = if args.output.is_empty() {
@@ -497,6 +499,7 @@ async fn main() -> Result<()> {
         &output_pipe,
         bypass_skip_upgrade_on_no_changes,
         bypass_assume_yes,
+        bypass_assume_no,
     )
     .await;
 
@@ -536,6 +539,7 @@ async fn do_task(
     output: &output::MultiOutput,
     bypass_skip_upgrade_on_no_changes: bool,
     bypass_assume_yes: bool,
+    bypass_assume_no: bool,
 ) -> Result<()> {
     // let mut helm_repos = HelmRepos::new();
 
@@ -555,6 +559,7 @@ async fn do_task(
         skipped,
         bypass_skip_upgrade_on_no_changes,
         bypass_assume_yes,
+        bypass_assume_no,
     )
     .await
 }
@@ -753,6 +758,7 @@ async fn run_jobs_concurrently(
     skipped: InstallationSet,
     bypass_skip_upgrade_on_no_changes: bool,
     bypass_assume_yes: bool,
+    bypass_assume_no: bool,
 ) -> Result<()> {
     let required_repos = if request.requires_helm_repos() {
         get_required_repos(&todo)
@@ -768,6 +774,7 @@ async fn run_jobs_concurrently(
             repos,
             bypass_skip_upgrade_on_no_changes,
             bypass_assume_yes,
+            bypass_assume_no,
         )
         .await
     })
@@ -784,6 +791,7 @@ async fn run_jobs_concurrently_with_repos(
     helm_repos: Arc<HelmReposLock>,
     bypass_skip_upgrade_on_no_changes: bool,
     bypass_assume_yes: bool,
+    bypass_assume_no: bool,
 ) -> Result<()> {
     let do_depends = request.do_depends();
     // let skip_depends = !matches!(jobs.0, Task::Upgrade | Task::Test);
@@ -813,6 +821,7 @@ async fn run_jobs_concurrently_with_repos(
                     &output,
                     bypass_skip_upgrade_on_no_changes,
                     bypass_assume_yes,
+                    bypass_assume_no,
                 )
                 .await
             })
@@ -912,6 +921,7 @@ async fn worker_thread(
     output: &MultiOutput,
     bypass_skip_upgrade_on_no_changes: bool,
     bypass_assume_yes: bool,
+    bypass_assume_no: bool,
 ) -> Result<()> {
     let mut errors = false;
 
@@ -939,6 +949,7 @@ async fn worker_thread(
             output,
             bypass_skip_upgrade_on_no_changes,
             bypass_assume_yes,
+            bypass_assume_no,
         )
         .await;
         match &result {
