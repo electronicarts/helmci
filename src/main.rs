@@ -67,6 +67,14 @@ pub struct Update {
     pub value: String,
 }
 
+/// For command line options, we need to control the upgrade process.
+#[derive(Clone, Copy)] // Add Clone and Copy traits
+enum UpgradeControl {
+    BypassAndAssumeYes,
+    BypassAndAssumeNo,
+    Normal,
+}
+
 impl FromStr for Update {
     type Err = anyhow::Error;
 
@@ -191,33 +199,35 @@ async fn run_job(
     helm_repos: &HelmReposLock,
     installation: &Arc<Installation>,
     tx: &MultiOutput,
-    bypass_skip_upgrade_on_no_changes: bool,
-    bypass_assume_yes: bool,
-    bypass_assume_no: bool,
+    upgrade_control: &UpgradeControl,
 ) -> Result<()> {
     match command {
         Request::Upgrade { .. } => {
             let diff_result = helm::diff(installation, helm_repos, tx).await?;
             match diff_result {
                 DiffResult::NoChanges => {
-                    if bypass_skip_upgrade_on_no_changes {
-                        if bypass_assume_yes {
+                    match upgrade_control {
+                        UpgradeControl::BypassAndAssumeYes => {
                             helm::upgrade(installation, helm_repos, tx, true).await?;
                             helm::upgrade(installation, helm_repos, tx, false).await?;
-                        } // bypass_assume_no is an implicit case
-                    } else {
-                        print!("No changes detected. Upgrade anyway? (Y/n): ");
-
-                        let mut input = String::new();
-                        if let Err(e) = io::stdin().read_line(&mut input) {
-                            eprintln!("Failed to read input: {e}");
-                            return Err(anyhow::anyhow!("Failed to read input"));
                         }
-                        let input = input.trim().to_lowercase();
+                        UpgradeControl::BypassAndAssumeNo => {
+                            // Do nothing, as bypass_assume_no is an implicit case
+                        }
+                        UpgradeControl::Normal => {
+                            print!("No changes detected. Upgrade anyway? (Y/n): ");
 
-                        if input == "y" || input == "yes" || input.is_empty() {
-                            helm::upgrade(installation, helm_repos, tx, true).await?;
-                            helm::upgrade(installation, helm_repos, tx, false).await?;
+                            let mut input = String::new();
+                            if let Err(e) = io::stdin().read_line(&mut input) {
+                                eprintln!("Failed to read input: {e}");
+                                return Err(anyhow::anyhow!("Failed to read input"));
+                            }
+                            let input = input.trim().to_lowercase();
+
+                            if input == "y" || input == "yes" || input.is_empty() {
+                                helm::upgrade(installation, helm_repos, tx, true).await?;
+                                helm::upgrade(installation, helm_repos, tx, false).await?;
+                            }
                         }
                     }
                 }
@@ -440,17 +450,26 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     // Extract the bypass_skip_upgrade_on_no_changes and bypass_assume_yes flags if the command is Upgrade
-    let (bypass_skip_upgrade_on_no_changes, bypass_assume_yes, bypass_assume_no) =
-        if let Request::Upgrade {
-            bypass_skip_upgrade_on_no_changes,
-            yes,
-            no,
-        } = args.command
-        {
-            (bypass_skip_upgrade_on_no_changes, yes, no)
+    let upgrade_control = if let Request::Upgrade {
+        bypass_skip_upgrade_on_no_changes,
+        yes,
+        no,
+    } = args.command
+    {
+        if bypass_skip_upgrade_on_no_changes {
+            if yes {
+                UpgradeControl::BypassAndAssumeYes
+            } else if no {
+                UpgradeControl::BypassAndAssumeNo
+            } else {
+                UpgradeControl::Normal
+            }
         } else {
-            (false, false, false)
-        };
+            UpgradeControl::Normal
+        }
+    } else {
+        UpgradeControl::Normal
+    };
 
     let output_types = if args.output.is_empty() {
         vec![OutputFormat::Text]
@@ -496,15 +515,7 @@ async fn main() -> Result<()> {
         .await;
 
     // Save the error for now so we can clean up.
-    let rc = do_task(
-        command,
-        &args,
-        &output_pipe,
-        bypass_skip_upgrade_on_no_changes,
-        bypass_assume_yes,
-        bypass_assume_no,
-    )
-    .await;
+    let rc = do_task(command, &args, &output_pipe, upgrade_control).await;
 
     // Log the error.
     if let Err(err) = &rc {
@@ -540,9 +551,7 @@ async fn do_task(
     command: Arc<Request>,
     args: &Args,
     output: &output::MultiOutput,
-    bypass_skip_upgrade_on_no_changes: bool,
-    bypass_assume_yes: bool,
-    bypass_assume_no: bool,
+    upgrade_control: UpgradeControl,
 ) -> Result<()> {
     // let mut helm_repos = HelmRepos::new();
 
@@ -555,16 +564,7 @@ async fn do_task(
     }
 
     // let jobs: Jobs = (command, todo);
-    run_jobs_concurrently(
-        command,
-        todo,
-        output,
-        skipped,
-        bypass_skip_upgrade_on_no_changes,
-        bypass_assume_yes,
-        bypass_assume_no,
-    )
-    .await
+    run_jobs_concurrently(command, todo, output, skipped, &upgrade_control).await
 }
 
 type SkippedResult = Arc<Installation>;
@@ -759,9 +759,7 @@ async fn run_jobs_concurrently(
     todo: Vec<Arc<Installation>>,
     output: &output::MultiOutput,
     skipped: InstallationSet,
-    bypass_skip_upgrade_on_no_changes: bool,
-    bypass_assume_yes: bool,
-    bypass_assume_no: bool,
+    upgrade_control: &UpgradeControl,
 ) -> Result<()> {
     let required_repos = if request.requires_helm_repos() {
         get_required_repos(&todo)
@@ -769,17 +767,8 @@ async fn run_jobs_concurrently(
         vec![]
     };
     let rc = with_helm_repos(required_repos, |repos| async {
-        run_jobs_concurrently_with_repos(
-            request,
-            todo,
-            output,
-            skipped,
-            repos,
-            bypass_skip_upgrade_on_no_changes,
-            bypass_assume_yes,
-            bypass_assume_no,
-        )
-        .await
+        run_jobs_concurrently_with_repos(request, todo, output, skipped, repos, *upgrade_control)
+            .await
     })
     .await;
 
@@ -792,9 +781,7 @@ async fn run_jobs_concurrently_with_repos(
     output: &output::MultiOutput,
     skipped: InstallationSet,
     helm_repos: Arc<HelmReposLock>,
-    bypass_skip_upgrade_on_no_changes: bool,
-    bypass_assume_yes: bool,
-    bypass_assume_no: bool,
+    upgrade_control: UpgradeControl,
 ) -> Result<()> {
     let do_depends = request.do_depends();
     // let skip_depends = !matches!(jobs.0, Task::Upgrade | Task::Test);
@@ -822,9 +809,7 @@ async fn run_jobs_concurrently_with_repos(
                     &helm_repos,
                     &tx_dispatch,
                     &output,
-                    bypass_skip_upgrade_on_no_changes,
-                    bypass_assume_yes,
-                    bypass_assume_no,
+                    &upgrade_control,
                 )
                 .await
             })
@@ -922,9 +907,7 @@ async fn worker_thread(
     helm_repos: &HelmReposLock,
     tx_dispatch: &mpsc::Sender<Dispatch>,
     output: &MultiOutput,
-    bypass_skip_upgrade_on_no_changes: bool,
-    bypass_assume_yes: bool,
-    bypass_assume_no: bool,
+    upgrade_control: &UpgradeControl,
 ) -> Result<()> {
     let mut errors = false;
 
@@ -945,16 +928,7 @@ async fn worker_thread(
             .await;
 
         // Execute the job
-        let result = run_job(
-            command,
-            helm_repos,
-            &install,
-            output,
-            bypass_skip_upgrade_on_no_changes,
-            bypass_assume_yes,
-            bypass_assume_no,
-        )
-        .await;
+        let result = run_job(command, helm_repos, &install, output, upgrade_control).await;
         match &result {
             Ok(()) => {
                 tx_dispatch
