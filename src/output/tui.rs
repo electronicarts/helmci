@@ -456,6 +456,8 @@ impl HasMultilineText for HelmResult {
 
     fn get_text(&self, _state: &State) -> Vec<Spans> {
         let mut lines = vec![key_value_space("Result", self.result_line())];
+        lines.push(key_value_space("Exit Code", self.exit_code().to_string()));
+
         lines.push(key_value_space("Cmd", self.command_line().to_string()));
 
         let stdout = self.stdout();

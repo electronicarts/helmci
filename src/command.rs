@@ -40,6 +40,10 @@ impl Display for CommandSuccess {
         f.write_str(&summary)?;
         f.write_str("\n")?;
 
+        f.write_str("exit code: ")?;
+        f.write_str(&self.exit_code.to_string())?;
+        f.write_str("\n")?;
+
         f.write_str("command: ")?;
         f.write_str(&self.cmd.to_string())?;
         f.write_str("\n")?;
@@ -101,6 +105,10 @@ impl Display for CommandError {
         f.write_str(&summary)?;
         f.write_str("\n")?;
 
+        f.write_str("exit code: ")?;
+        f.write_str(&self.exit_code.to_string())?;
+        f.write_str("\n")?;
+
         f.write_str("command: ")?;
         f.write_str(&self.cmd.to_string())?;
         f.write_str("\n")?;
@@ -126,7 +134,26 @@ impl Error for CommandError {}
 pub type CommandResult = Result<CommandSuccess, CommandError>;
 
 #[derive(Clone, Eq, PartialEq)]
-pub struct CommandLine(pub OsString, pub Vec<OsString>);
+pub struct CommandLine {
+    cmd: OsString,
+    args: Vec<OsString>,
+    allowed_exit_codes: Vec<i32>,
+}
+
+impl CommandLine {
+    pub fn new(cmd: OsString, args: Vec<OsString>) -> Self {
+        CommandLine {
+            cmd,
+            args,
+            allowed_exit_codes: vec![0],
+        }
+    }
+
+    pub fn with_allowed_exit_codes(mut self, allowed_exit_codes: Vec<i32>) -> Self {
+        self.allowed_exit_codes = allowed_exit_codes;
+        self
+    }
+}
 
 fn get_exit_code(output: &Result<Output, io::Error>) -> i32 {
     output
@@ -148,7 +175,11 @@ impl CommandLine {
     pub async fn run(&self) -> CommandResult {
         let start = Instant::now();
 
-        let CommandLine(cmd, args) = &self;
+        let CommandLine {
+            cmd,
+            args,
+            allowed_exit_codes,
+        } = &self;
         let output = Command::new(cmd)
             .args(args)
             .stdin(Stdio::null())
@@ -176,8 +207,8 @@ impl CommandLine {
 
         let kind = match output {
             Err(err) => Err(CommandErrorKind::FailedToStart { err }),
-            Ok(output) => {
-                if output.status.success() || exit_code == 2 {
+            Ok(_output) => {
+                if allowed_exit_codes.contains(&exit_code) {
                     Ok(())
                 } else {
                     Err(CommandErrorKind::BadExitCode {})
@@ -207,8 +238,8 @@ impl CommandLine {
 
 impl Display for CommandLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.to_string_lossy())?;
-        for arg in &self.1 {
+        write!(f, "{}", self.cmd.to_string_lossy())?;
+        for arg in &self.args {
             write!(f, " {}", arg.to_string_lossy())?;
         }
         Ok(())
@@ -217,8 +248,8 @@ impl Display for CommandLine {
 
 impl std::fmt::Debug for CommandLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "CommandLine(\"{:?}", self.0)?;
-        for arg in &self.1 {
+        write!(f, "CommandLine(\"{:?}", self.cmd)?;
+        for arg in &self.args {
             write!(f, " {arg:?}")?;
         }
         write!(f, "\")")?;

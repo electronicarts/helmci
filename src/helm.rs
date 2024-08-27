@@ -118,8 +118,6 @@ pub struct HelmResult {
     pub installation: Arc<Installation>,
     pub result: CommandResult,
     pub command: Command,
-    // The exit code contains information about whether there were any diffs.
-    pub exit_code: i32,
 }
 
 impl HelmResult {
@@ -132,7 +130,6 @@ impl HelmResult {
             installation: installation.clone(),
             result,
             command,
-            exit_code: 0,
         }
     }
 
@@ -174,6 +171,13 @@ impl HelmResult {
             Err(err) => err.result_line(),
         }
     }
+
+    pub const fn exit_code(&self) -> i32 {
+        match &self.result {
+            Ok(success) => success.exit_code,
+            Err(err) => err.exit_code,
+        }
+    }
 }
 
 /// Request to add a repo to helm.
@@ -185,7 +189,7 @@ pub async fn add_repo(
 ) -> Result<()> {
     debug!("Add helm repo {} at {}... ", repo_name, repo_url);
 
-    let command: CommandLine = CommandLine(
+    let command: CommandLine = CommandLine::new(
         "helm".into(),
         vec![
             "repo".into(),
@@ -216,7 +220,7 @@ pub async fn remove_repo(
 ) -> Result<()> {
     debug!("Remove helm repo {} at {}... ", repo_name, repo_url);
 
-    let command: CommandLine = CommandLine(
+    let command: CommandLine = CommandLine::new(
         "helm".into(),
         vec!["repo".into(), "remove".into(), repo_name.into()],
     );
@@ -247,7 +251,7 @@ pub async fn lint(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<
         args.push(path.clone().into_os_string());
         args.append(&mut get_template_parameters(installation));
 
-        let command_line = CommandLine(helm_path(), args);
+        let command_line = CommandLine::new(helm_path(), args);
         let result = command_line.run().await;
         let has_errors = result.is_err();
         let i_result = HelmResult::from_result(installation, result, Command::Lint);
@@ -355,7 +359,7 @@ pub async fn template(
     args.append(&mut chart_args);
     args.append(&mut get_template_parameters(installation));
 
-    let command_line = CommandLine(helm_path(), args);
+    let command_line = CommandLine::new(helm_path(), args);
     let result = command_line.run().await;
     let has_errors = result.is_err();
     let i_result = HelmResult::from_result(installation, result, Command::Template);
@@ -413,17 +417,14 @@ pub async fn diff(
     args.append(&mut get_template_parameters(installation));
 
     // Create a CommandLine instance with the helm path and the constructed arguments.
-    let command_line = CommandLine(helm_path(), args);
+    let command_line = CommandLine::new(helm_path(), args).with_allowed_exit_codes(vec![0, 2]);
     // Run the command and await the result.
     let result = command_line.run().await;
-    // Check if there were any errors in the command execution.
-    let _has_errors = result.is_err();
     // Create a HelmResult instance from the command result.
-    let mut i_result = HelmResult::from_result(installation, result, Command::Diff);
+    let i_result = HelmResult::from_result(installation, result, Command::Diff);
 
     // Evaluate the detailed exit code - any non-zero exit code indicates changes (1) or errors (2).
     let diff_result = if let Ok(command_success) = &i_result.result {
-        i_result.exit_code = command_success.exit_code;
         match command_success.exit_code {
             0 => {
                 log_debug_message(tx, "No changes detected!").await; // Exit code 0 indicates no changes.
@@ -487,7 +488,7 @@ pub async fn upgrade(
         args.push("--dry-run".into());
     }
 
-    let command_line = CommandLine(helm_path(), args);
+    let command_line = CommandLine::new(helm_path(), args);
     let result = command_line.run().await;
     let has_errors = result.is_err();
     let command = if dry_run {
@@ -561,7 +562,7 @@ async fn outdated_helm_chart(
         format!("{}/{chart_name}", repo.name).into(),
     ];
 
-    let command_line = CommandLine(helm_path(), args);
+    let command_line = CommandLine::new(helm_path(), args);
     let result = command_line.run().await;
     let has_errors = result.is_err();
 
@@ -699,7 +700,7 @@ impl ParsedOci {
                     path.into(),
                 ];
 
-                let command_line = CommandLine(aws_path(), args);
+                let command_line = CommandLine::new(aws_path(), args);
                 let result = command_line.run().await;
 
                 let rc = match &result {
