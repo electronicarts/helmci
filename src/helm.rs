@@ -370,7 +370,12 @@ pub async fn template(
 }
 
 // The DiffResult struct is used to store the exit code of the diff command.
-pub enum DiffResult { NoChanges, Changes, Errors, Unknown }
+pub enum DiffResult {
+    NoChanges,
+    Changes,
+    Errors,
+    Unknown,
+}
 
 /// Run the helm diff command.
 pub async fn diff(
