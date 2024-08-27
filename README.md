@@ -46,6 +46,35 @@ Only do this if you really want to deploy:
 cargo run -- --vdir ./example/helm-values upgrade
 ```
 
+## Additional Options
+
+### Bypass Upgrade on No Changes
+
+The `-b` or `--bypass-upgrade-on-no-changes` option allows you to bypass the upgrade process if no changes are detected. This can be useful to save time and resources when you are confident that no changes have been made to the release values.
+
+### Suboptions
+
+#### Yes
+
+The `-y` or `--yes` suboption can be used in conjunction with the `--bypass-upgrade-on-no-changes` option to automatically proceed with the upgrade even if no changes are detected. This is useful for automated scripts where manual intervention is not possible.
+
+#### No
+
+The `-n` or `--no` suboption can be used in conjunction with the `--bypass-upgrade-on-no-changes` option to automatically skip the upgrade if no changes are detected. This is useful when you want to ensure that upgrades are only performed when necessary without manual intervention.
+
+Example usage:
+
+```sh
+# Bypass upgrade on no changes and automatically proceed with the upgrade
+cargo run -- --vdir ./example/helm-values upgrade --bypass-upgrade-on-no-changes --yes
+cargo run -- --vdir ./example/helm-values upgrade -b -y
+
+
+# Bypass upgrade on no changes and automatically skip the upgrade
+cargo run -- --vdir ./example/helm-values upgrade --bypass-upgrade-on-no-changes --no
+cargo run -- --vdir ./example/helm-values upgrade -b -y
+```
+
 ## Config layout
 
 You can have zero or more environments.
