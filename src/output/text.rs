@@ -216,6 +216,7 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
                 command,
                 result,
                 installation,
+                #[allow(unused_variables)] // Suppress warning for this variable
                 exit_code,
             } = hr.as_ref();
             let result_str = hr.result_line();
