@@ -12,10 +12,10 @@
 extern crate lazy_static;
 
 use std::collections::HashMap;
+use std::io::{self, Write};
 use std::path::PathBuf;
 use std::str::{self, FromStr};
 use std::sync::Arc;
-use std::io::{self, Write};
 
 use anyhow::Result;
 use anyhow::{anyhow, Context};
@@ -35,9 +35,9 @@ use tracing_subscriber::{Layer, Registry};
 mod command;
 
 mod helm;
+use helm::DiffResult;
 use helm::{HelmChart, Installation};
 use helm::{HelmRepo, InstallationId};
-use helm::DiffResult;
 
 mod depends;
 use depends::{is_depends_ok, HashIndex, InstallationSet};
@@ -202,7 +202,6 @@ async fn run_job(
                         helm::upgrade(installation, helm_repos, tx, true).await?;
                         helm::upgrade(installation, helm_repos, tx, false).await?;
                     } else {
-
                         print!("No changes detected. Upgrade anyway? (Y/n): ");
                         io::stdout().flush().unwrap();
 
@@ -301,7 +300,6 @@ struct Args {
     /// Should we process releases that have auto set to false?
     #[clap(long, value_enum, default_value_t=AutoState::Yes)]
     auto: AutoState,
-
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -428,9 +426,12 @@ async fn main() -> Result<()> {
 
     tracing_subscriber::fmt::init();
     let args = Args::parse();
-    
+
     // Extract the bypass_skip_upgrade_on_no_changes flag if the command is Upgrade
-    let bypass_skip_upgrade_on_no_changes = if let Request::Upgrade { bypass_skip_upgrade_on_no_changes } = args.command {
+    let bypass_skip_upgrade_on_no_changes = if let Request::Upgrade {
+        bypass_skip_upgrade_on_no_changes,
+    } = args.command
+    {
         bypass_skip_upgrade_on_no_changes
     } else {
         false
@@ -480,7 +481,13 @@ async fn main() -> Result<()> {
         .await;
 
     // Save the error for now so we can clean up.
-    let rc = do_task(command, &args, &output_pipe, bypass_skip_upgrade_on_no_changes).await;
+    let rc = do_task(
+        command,
+        &args,
+        &output_pipe,
+        bypass_skip_upgrade_on_no_changes,
+    )
+    .await;
 
     // Log the error.
     if let Err(err) = &rc {
@@ -512,7 +519,12 @@ async fn main() -> Result<()> {
     rc
 }
 
-async fn do_task(command: Arc<Request>, args: &Args, output: &output::MultiOutput, bypass_skip_upgrade_on_no_changes: bool) -> Result<()> {
+async fn do_task(
+    command: Arc<Request>,
+    args: &Args,
+    output: &output::MultiOutput,
+    bypass_skip_upgrade_on_no_changes: bool,
+) -> Result<()> {
     // let mut helm_repos = HelmRepos::new();
 
     let (skipped_list, todo) = generate_todo(args)?;
@@ -524,7 +536,14 @@ async fn do_task(command: Arc<Request>, args: &Args, output: &output::MultiOutpu
     }
 
     // let jobs: Jobs = (command, todo);
-    run_jobs_concurrently(command, todo, output, skipped, bypass_skip_upgrade_on_no_changes).await
+    run_jobs_concurrently(
+        command,
+        todo,
+        output,
+        skipped,
+        bypass_skip_upgrade_on_no_changes,
+    )
+    .await
 }
 
 type SkippedResult = Arc<Installation>;
@@ -726,9 +745,16 @@ async fn run_jobs_concurrently(
     } else {
         vec![]
     };
-
     let rc = with_helm_repos(required_repos, |repos| async {
-        run_jobs_concurrently_with_repos(request, todo, output, skipped, repos, bypass_skip_upgrade_on_no_changes).await
+        run_jobs_concurrently_with_repos(
+            request,
+            todo,
+            output,
+            skipped,
+            repos,
+            bypass_skip_upgrade_on_no_changes,
+        )
+        .await
     })
     .await;
 
@@ -764,7 +790,14 @@ async fn run_jobs_concurrently_with_repos(
             let request = request.clone();
             let helm_repos = helm_repos.clone();
             tokio::spawn(async move {
-                worker_thread(&request, &helm_repos, &tx_dispatch, &output, bypass_skip_upgrade_on_no_changes).await
+                worker_thread(
+                    &request,
+                    &helm_repos,
+                    &tx_dispatch,
+                    &output,
+                    bypass_skip_upgrade_on_no_changes,
+                )
+                .await
             })
         })
         .collect();
@@ -881,7 +914,14 @@ async fn worker_thread(
             .await;
 
         // Execute the job
-        let result = run_job(command, helm_repos, &install, output, bypass_skip_upgrade_on_no_changes).await;
+        let result = run_job(
+            command,
+            helm_repos,
+            &install,
+            output,
+            bypass_skip_upgrade_on_no_changes,
+        )
+        .await;
         match &result {
             Ok(()) => {
                 tx_dispatch
