@@ -438,16 +438,17 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     // Extract the bypass_skip_upgrade_on_no_changes and bypass_assume_yes flags if the command is Upgrade
-    let (bypass_skip_upgrade_on_no_changes, bypass_assume_yes, bypass_assume_no) = if let Request::Upgrade {
-        bypass_skip_upgrade_on_no_changes,
-        yes,
-        no,
-    } = args.command
-    {
-        (bypass_skip_upgrade_on_no_changes, yes, no)
-    } else {
-        (false, false, false)
-    };
+    let (bypass_skip_upgrade_on_no_changes, bypass_assume_yes, bypass_assume_no) =
+        if let Request::Upgrade {
+            bypass_skip_upgrade_on_no_changes,
+            yes,
+            no,
+        } = args.command
+        {
+            (bypass_skip_upgrade_on_no_changes, yes, no)
+        } else {
+            (false, false, false)
+        };
 
     let output_types = if args.output.is_empty() {
         vec![OutputFormat::Text]
