@@ -177,7 +177,7 @@ impl CommandLine {
         let kind = match output {
             Err(err) => Err(CommandErrorKind::FailedToStart { err }),
             Ok(output) => {
-                if output.status.success() {
+                if output.status.success() || exit_code == 2 {
                     Ok(())
                 } else {
                     Err(CommandErrorKind::BadExitCode {})
