@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::{self, FromStr};
 use std::sync::Arc;
+use std::io::{self, Write};
 
 use anyhow::Result;
 use anyhow::{anyhow, Context};
@@ -36,6 +37,7 @@ mod command;
 mod helm;
 use helm::{HelmChart, Installation};
 use helm::{HelmRepo, InstallationId};
+use helm::DiffResult;
 
 mod depends;
 use depends::{is_depends_ok, HashIndex, InstallationSet};
@@ -184,62 +186,67 @@ where
     Ok(rc)
 }
 
-// Define the possible results of a job.
-enum JobResult {
-    Unit,                   // Represents a unit result.
-    Diff(helm::DiffResult), // Represents a diff result.
-}
-
-// Asynchronously run a job based on the provided command.
 async fn run_job(
-    command: &Request,                // The command to execute.
-    helm_repos: &HelmReposLock,       // The helm repositories lock.
-    installation: &Arc<Installation>, // The installation details.
-    tx: &MultiOutput,                 // The multi-output channel.
-) -> Result<JobResult> {
+    command: &Request,
+    helm_repos: &HelmReposLock,
+    installation: &Arc<Installation>,
+    tx: &MultiOutput,
+    bypass_skip_upgrade_on_no_changes: bool,
+) -> Result<()> {
     match command {
-        // Handle the Upgrade request.
         Request::Upgrade { .. } => {
-            // Run the helm diff command.
             let diff_result = helm::diff(installation, helm_repos, tx).await?;
-            // Check the exit code of the diff command.
-            if diff_result._exit_code == 0 || diff_result._exit_code == 2 {
-                // If no changes or only changes detected, return Unit.
-                return Ok(JobResult::Unit);
+            match diff_result {
+                DiffResult::NoChanges => {
+                    if bypass_skip_upgrade_on_no_changes {
+                        helm::upgrade(installation, helm_repos, tx, true).await?;
+                        helm::upgrade(installation, helm_repos, tx, false).await?;
+                    } else {
+
+                        print!("No changes detected. Upgrade anyway? (Y/n): ");
+                        io::stdout().flush().unwrap();
+
+                        let mut input = String::new();
+                        io::stdin().read_line(&mut input).unwrap();
+                        let input = input.trim().to_lowercase();
+
+                        if input == "Y" || input == "y" || input == "yes" || input == "" {
+                            helm::upgrade(installation, helm_repos, tx, true).await?;
+                            helm::upgrade(installation, helm_repos, tx, false).await?;
+                        }
+                    }
+                }
+                DiffResult::Changes => {
+                    helm::upgrade(installation, helm_repos, tx, true).await?;
+                    helm::upgrade(installation, helm_repos, tx, false).await?;
+                }
+                DiffResult::Errors | DiffResult::Unknown => {
+                    // Handle errors or unknown cases if needed.
+                }
             }
-            // Perform a dry-run upgrade.
-            helm::upgrade(installation, helm_repos, tx, true).await?;
-            // Perform the actual upgrade.
-            helm::upgrade(installation, helm_repos, tx, false).await?;
-            // Return Unit result.
-            Ok(JobResult::Unit)
+            Ok(())
         }
-        // Handle the Diff request.
         Request::Diff { .. } => {
-            // Run the helm diff command.
-            let diff_result = helm::diff(installation, helm_repos, tx).await?;
-            // Return the diff result.
-            Ok(JobResult::Diff(helm::DiffResult {
-                _exit_code: diff_result._exit_code,
-            }))
+            helm::diff(installation, helm_repos, tx).await?;
+            Ok(())
         }
         Request::Test { .. } => {
             helm::outdated(installation, helm_repos, tx).await?;
             helm::lint(installation, tx).await?;
             helm::template(installation, helm_repos, tx).await?;
-            Ok(JobResult::Unit)
+            Ok(())
         }
         Request::Template { .. } => {
             helm::template(installation, helm_repos, tx).await?;
-            Ok(JobResult::Unit)
+            Ok(())
         }
         Request::Outdated { .. } => {
             helm::outdated(installation, helm_repos, tx).await?;
-            Ok(JobResult::Unit)
+            Ok(())
         }
         Request::Update { updates, .. } => {
             helm::update(installation, tx, updates).await?;
-            Ok(JobResult::Unit)
+            Ok(())
         }
     }
 }
@@ -294,12 +301,17 @@ struct Args {
     /// Should we process releases that have auto set to false?
     #[clap(long, value_enum, default_value_t=AutoState::Yes)]
     auto: AutoState,
+
 }
 
 #[derive(Subcommand, Debug, Clone)]
 enum Request {
     /// Upgrade/install releases.
-    Upgrade {},
+    Upgrade {
+        /// Bypass skip upgrade on no changes.
+        #[clap(long, short = 'b')]
+        bypass_skip_upgrade_on_no_changes: bool,
+    },
 
     /// Diff releases with current state.
     Diff {},
@@ -416,6 +428,13 @@ async fn main() -> Result<()> {
 
     tracing_subscriber::fmt::init();
     let args = Args::parse();
+    
+    // Extract the bypass_skip_upgrade_on_no_changes flag if the command is Upgrade
+    let bypass_skip_upgrade_on_no_changes = if let Request::Upgrade { bypass_skip_upgrade_on_no_changes } = args.command {
+        bypass_skip_upgrade_on_no_changes
+    } else {
+        false
+    };
 
     let output_types = if args.output.is_empty() {
         vec![OutputFormat::Text]
@@ -461,7 +480,7 @@ async fn main() -> Result<()> {
         .await;
 
     // Save the error for now so we can clean up.
-    let rc = do_task(command, &args, &output_pipe).await;
+    let rc = do_task(command, &args, &output_pipe, bypass_skip_upgrade_on_no_changes).await;
 
     // Log the error.
     if let Err(err) = &rc {
@@ -493,7 +512,7 @@ async fn main() -> Result<()> {
     rc
 }
 
-async fn do_task(command: Arc<Request>, args: &Args, output: &output::MultiOutput) -> Result<()> {
+async fn do_task(command: Arc<Request>, args: &Args, output: &output::MultiOutput, bypass_skip_upgrade_on_no_changes: bool) -> Result<()> {
     // let mut helm_repos = HelmRepos::new();
 
     let (skipped_list, todo) = generate_todo(args)?;
@@ -505,7 +524,7 @@ async fn do_task(command: Arc<Request>, args: &Args, output: &output::MultiOutpu
     }
 
     // let jobs: Jobs = (command, todo);
-    run_jobs_concurrently(command, todo, output, skipped).await
+    run_jobs_concurrently(command, todo, output, skipped, bypass_skip_upgrade_on_no_changes).await
 }
 
 type SkippedResult = Arc<Installation>;
@@ -700,6 +719,7 @@ async fn run_jobs_concurrently(
     todo: Vec<Arc<Installation>>,
     output: &output::MultiOutput,
     skipped: InstallationSet,
+    bypass_skip_upgrade_on_no_changes: bool,
 ) -> Result<()> {
     let required_repos = if request.requires_helm_repos() {
         get_required_repos(&todo)
@@ -708,7 +728,7 @@ async fn run_jobs_concurrently(
     };
 
     let rc = with_helm_repos(required_repos, |repos| async {
-        run_jobs_concurrently_with_repos(request, todo, output, skipped, repos).await
+        run_jobs_concurrently_with_repos(request, todo, output, skipped, repos, bypass_skip_upgrade_on_no_changes).await
     })
     .await;
 
@@ -721,6 +741,7 @@ async fn run_jobs_concurrently_with_repos(
     output: &output::MultiOutput,
     skipped: InstallationSet,
     helm_repos: Arc<HelmReposLock>,
+    bypass_skip_upgrade_on_no_changes: bool,
 ) -> Result<()> {
     let do_depends = request.do_depends();
     // let skip_depends = !matches!(jobs.0, Task::Upgrade | Task::Test);
@@ -743,7 +764,7 @@ async fn run_jobs_concurrently_with_repos(
             let request = request.clone();
             let helm_repos = helm_repos.clone();
             tokio::spawn(async move {
-                worker_thread(&request, &helm_repos, &tx_dispatch, &output).await
+                worker_thread(&request, &helm_repos, &tx_dispatch, &output, bypass_skip_upgrade_on_no_changes).await
             })
         })
         .collect();
@@ -839,6 +860,7 @@ async fn worker_thread(
     helm_repos: &HelmReposLock,
     tx_dispatch: &mpsc::Sender<Dispatch>,
     output: &MultiOutput,
+    bypass_skip_upgrade_on_no_changes: bool,
 ) -> Result<()> {
     let mut errors = false;
 
@@ -859,17 +881,9 @@ async fn worker_thread(
             .await;
 
         // Execute the job
-        let result = run_job(command, helm_repos, &install, output).await;
+        let result = run_job(command, helm_repos, &install, output, bypass_skip_upgrade_on_no_changes).await;
         match &result {
-            Ok(JobResult::Unit) => {
-                // Handle the unit case
-                tx_dispatch
-                    .send(Dispatch::Done(HashIndex::get_hash_index(&install)))
-                    .await?;
-            }
-            Ok(JobResult::Diff(helm::DiffResult { _exit_code })) => {
-                // Handle the diff result case
-                // You might want to log or process the diff_result here
+            Ok(()) => {
                 tx_dispatch
                     .send(Dispatch::Done(HashIndex::get_hash_index(&install)))
                     .await?;
