@@ -63,15 +63,6 @@ impl MultiOutput {
         }
     }
 
-    pub fn try_send(&self, msg: Message) {
-        let msg = Arc::new(msg);
-        for tx in &self.tx {
-            tx.try_send(msg.clone()).unwrap_or_else(|err| {
-                print!("Cannot send message to output pipe: {err}");
-            });
-        }
-    }
-
     pub async fn send_log(&self, entry: LogEntry) {
         self.send(Message::Log(entry)).await;
     }
