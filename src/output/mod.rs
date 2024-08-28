@@ -11,7 +11,7 @@ use tokio::{sync::mpsc, time::Instant};
 
 use crate::{
     helm::{HelmResult, Installation},
-    layer::LogEntry,
+    logging::LogEntry,
     Request,
 };
 
@@ -71,7 +71,61 @@ impl MultiOutput {
             });
         }
     }
+
+    pub async fn send_log(&self, entry: LogEntry) {
+        self.send(Message::Log(entry)).await;
+    }
 }
+
+macro_rules! trace {
+    ($tx:expr, $($t:tt)*) => {
+        $tx.send_log($crate::logging::log!(
+            $crate::logging::LogLevel::Trace,
+            format!($($t)*)
+        ))
+    };
+}
+pub(crate) use trace;
+
+macro_rules! debug {
+    ($tx:expr, $($t:tt)*) => {
+        $tx.send_log($crate::logging::log!(
+            $crate::logging::LogLevel::Debug,
+            format!($($t)*)
+        ))
+    };
+}
+pub(crate) use debug;
+
+macro_rules! info {
+    ($tx:expr, $($t:tt)*) => {
+        $tx.send_log($crate::logging::log!(
+            $crate::logging::LogLevel::Info,
+            format!($($t)*)
+        ))
+    };
+}
+pub(crate) use info;
+
+macro_rules! warning {
+    ($tx:expr, $($t:tt)*) => {
+        $tx.send_log($crate::logging::log!(
+            $crate::logging::LogLevel::Warning,
+            format!($($t)*)
+        ))
+    };
+}
+pub(crate) use warning;
+
+macro_rules! error {
+    ($tx:expr, $($t:tt)*) => {
+        $tx.send_log($crate::logging::log!(
+            $crate::logging::LogLevel::Error,
+            format!($($t)*)
+        ))
+    };
+}
+pub(crate) use error;
 
 pub type Sender = mpsc::Sender<Arc<Message>>;
 

@@ -26,10 +26,6 @@ use futures::Future;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
-use tracing_subscriber::util::SubscriberInitExt;
-
-use tracing::{error, trace, warn, Level};
-use tracing_subscriber::{Layer, Registry};
 
 mod command;
 
@@ -42,6 +38,7 @@ mod depends;
 use depends::{is_depends_ok, HashIndex, InstallationSet};
 
 mod output;
+use output::{error, trace, warning};
 use output::{Message, MultiOutput, Output, Sender};
 
 mod config;
@@ -49,9 +46,7 @@ use config::Release;
 use config::{ChartReference, Cluster, Env};
 use config::{Overrides, ValuesFile, ValuesFormat};
 
-mod layer;
-use layer::log;
-use layer::CustomLayer;
+mod logging;
 
 mod duration;
 
@@ -158,13 +153,13 @@ impl Drop for HelmReposLock {
         // Send signal saying value has been dropped.
         if let Some(sender) = self.1.take() {
             if sender.send(()) == Err(()) {
-                error!("failed to send drop signal");
+                print!("failed to send drop signal");
             }
         }
     }
 }
 
-async fn with_helm_repos<T, FUT, FN>(repos: Vec<HelmRepo>, f: FN) -> Result<T>
+async fn with_helm_repos<T, FUT, FN>(repos: Vec<HelmRepo>, output: &MultiOutput, f: FN) -> Result<T>
 where
     T: Sized + Send,
     FUT: Future<Output = T> + Send,
@@ -172,7 +167,7 @@ where
 {
     // Add these repos
     for repo in &repos {
-        helm::add_repo(repo).await?;
+        helm::add_repo(repo, output).await?;
     }
 
     let clone = repos.clone();
@@ -187,7 +182,7 @@ where
     rx.await?;
 
     for repo in &clone {
-        helm::remove_repo(repo).await?;
+        helm::remove_repo(repo, output).await?;
     }
 
     Ok(rc)
@@ -426,11 +421,6 @@ fn get_output(output_format: OutputFormat) -> Result<(Box<dyn Output>, Sender)> 
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    if std::env::var("RUST_LOG").is_err() {
-        std::env::set_var("RUST_LOG", "helmci=debug");
-    }
-
-    tracing_subscriber::fmt::init();
     let args = Args::parse();
 
     // Extract the bypass_skip_upgrade_on_no_changes and bypass_assume_yes flags if the command is Upgrade
@@ -482,14 +472,6 @@ async fn main() -> Result<()> {
         (outputs, output_pipe)
     };
 
-    // Note this will only setup logging for current task, other tasks will use default
-    // global logging setup above.
-    let filter = tracing_subscriber::filter::EnvFilter::from_default_env();
-    let guard = filter
-        .and_then(CustomLayer::new(output_pipe.clone()))
-        .with_subscriber(Registry::default())
-        .set_default();
-
     let command = Arc::new(args.command.clone());
 
     // Send the Start message to output.
@@ -503,10 +485,11 @@ async fn main() -> Result<()> {
 
     // Log the error.
     if let Err(err) = &rc {
-        error!("ERROR: {}", err);
-        err.chain()
-            .skip(1)
-            .for_each(|cause| error!("because: {}", cause));
+        error!(output_pipe, "ERROR: {}", err).await;
+        let err_list = err.chain().skip(1);
+        for cause in err_list {
+            error!(output_pipe, "because: {}", cause).await;
+        }
     }
 
     // Send the FinishedAll message to output.
@@ -521,8 +504,6 @@ async fn main() -> Result<()> {
 
     // We have to unconfigure logging here (drop guard) so we can release the output handle.
     drop(output_pipe);
-    drop(guard);
-
     for output in &mut outputs {
         output.wait().await.context("The output plugin failed")?;
     }
@@ -539,7 +520,7 @@ async fn do_task(
 ) -> Result<()> {
     // let mut helm_repos = HelmRepos::new();
 
-    let (skipped_list, todo) = generate_todo(args)?;
+    let (skipped_list, todo) = generate_todo(args, output).await?;
 
     let mut skipped = InstallationSet::new();
     for item in skipped_list {
@@ -554,8 +535,9 @@ async fn do_task(
 type SkippedResult = Arc<Installation>;
 
 #[allow(clippy::cognitive_complexity)]
-fn generate_todo(
+async fn generate_todo(
     args: &Args,
+    output: &output::MultiOutput,
 ) -> Result<(Vec<SkippedResult>, Vec<Arc<Installation>>), anyhow::Error> {
     let vdir = PathBuf::from(&args.vdir);
     let envs = Env::list_all_env(&vdir)
@@ -578,16 +560,16 @@ fn generate_todo(
             Env::load(&vdir, &env_name).with_context(|| format!("Cannot load env {env_name}"))?;
 
         if env.config.locked {
-            warn!("Skipping locked env {}", env.name);
+            warning!(output, "Skipping locked env {}", env.name).await;
             continue;
         }
 
         if args.env != "*" && args.env != env_name {
-            trace!("Skipping env {}", env.name);
+            trace!(output, "Skipping env {}", env.name).await;
             continue;
         }
 
-        trace!("Processing env {}", env.name);
+        trace!(output, "Processing env {}", env.name).await;
 
         let all_clusters = env
             .list_all_clusters()
@@ -598,16 +580,16 @@ fn generate_todo(
             })?;
 
             if cluster.config.locked {
-                warn!("Skipping locked cluster {}", cluster.name);
+                warning!(output, "Skipping locked cluster {}", cluster.name).await;
                 continue;
             }
 
             if !args.cluster.is_empty() && !args.cluster.contains(&cluster_name) {
-                trace!("Skipping cluster {}", cluster.name);
+                trace!(output, "Skipping cluster {}", cluster.name).await;
                 continue;
             }
 
-            trace!("Processing cluster {}", cluster.name);
+            trace!(output, "Processing cluster {}", cluster.name).await;
 
             let all_releases = cluster.list_all_releases().with_context(|| {
                 format!("Cannot list releases from cluster {cluster_name} env {env_name}")
@@ -618,7 +600,7 @@ fn generate_todo(
                     .with_context(|| {
                         format!("Cannot load releases from cluster {cluster_name} env {env_name}")
                     })?;
-                trace!("Processing install {}", release.name);
+                trace!(output, "Processing install {}", release.name).await;
 
                 let auto_skip = match args.auto {
                     AutoState::Yes => !release.config.auto,
@@ -750,7 +732,7 @@ async fn run_jobs_concurrently(
     } else {
         vec![]
     };
-    let rc = with_helm_repos(required_repos, |repos| async {
+    let rc = with_helm_repos(required_repos, output, |repos| async {
         run_jobs_concurrently_with_repos(request, todo, output, skipped, repos, *upgrade_control)
             .await
     })
@@ -777,8 +759,10 @@ async fn run_jobs_concurrently_with_repos(
 
     // This process receives requests for jobs and dispatches them
     let (tx_dispatch, rx_dispatch) = mpsc::channel(10);
-    let dispatch =
-        tokio::spawn(async move { dispatch_thread(todo, skipped, rx_dispatch, do_depends).await });
+    let output_clone = output.clone();
+    let dispatch = tokio::spawn(async move {
+        dispatch_thread(todo, skipped, rx_dispatch, do_depends, &output_clone).await
+    });
 
     // The actual worker threads
     let threads: Vec<JoinHandle<Result<()>>> = (0..NUM_THREADS)
@@ -804,36 +788,36 @@ async fn run_jobs_concurrently_with_repos(
 
     let mut errors: bool = false;
     for t in threads {
-        trace!("Waiting for worker thread");
+        trace!(output, "Waiting for worker thread").await;
         let rc = t.await;
 
         match rc {
-            Ok(Ok(())) => trace!("Worker thread finished without errors"),
+            Ok(Ok(())) => trace!(output, "Worker thread finished without errors").await,
             Ok(Err(err)) => {
-                error!("Worker thread returned error: {err}");
+                error!(output, "Worker thread returned error: {err}").await;
                 errors = true;
             }
             Err(err) => {
-                error!("Error waiting for worker thread: {err}");
+                error!(output, "Error waiting for worker thread: {err}").await;
                 errors = true;
             }
         }
     }
 
-    trace!("Waiting for dispatch thread");
+    trace!(output, "Waiting for dispatch thread").await;
     let rc = dispatch.await;
 
     match rc {
         Ok(Ok(())) => {
-            trace!("Dispatch finished without errors");
+            trace!(output, "Dispatch finished without errors").await;
             Ok(())
         }
         Ok(Err(err)) => {
-            error!("Dispatch thread returned error: {err}");
+            error!(output, "Dispatch thread returned error: {err}").await;
             Err(err)
         }
         Err(err) => {
-            error!("Error waiting for dispatch thread: {err}");
+            error!(output, "Error waiting for dispatch thread: {err}").await;
             Err(anyhow!("Dispatch thread join error: {err}"))
         }
     }?;
@@ -850,6 +834,7 @@ async fn dispatch_thread(
     skipped: InstallationSet,
     mut rx_dispatch: mpsc::Receiver<Dispatch>,
     do_depends: bool,
+    output: &MultiOutput,
 ) -> Result<(), anyhow::Error> {
     let mut installations: Vec<Option<&Arc<Installation>>> = todo.iter().map(Some).collect();
     let mut done = skipped;
@@ -876,10 +861,10 @@ async fn dispatch_thread(
     if remaining.is_empty() {
         Ok(())
     } else {
-        remaining
-            .iter()
-            .filter_map(|i| **i)
-            .for_each(|i| error!("Still pending {:?}", i.name));
+        let pending = remaining.iter().filter_map(|i| **i);
+        for i in pending {
+            error!(output, "Still pending {:?}", i.name).await;
+        }
         Err(anyhow::anyhow!(
             "Installations still pending; probably broken dependancies"
         ))
@@ -920,12 +905,7 @@ async fn worker_thread(
                     .await?;
             }
             Err(err) => {
-                output
-                    .send(Message::Log(log!(
-                        Level::ERROR,
-                        &format!("job failed: {err}")
-                    )))
-                    .await;
+                error!(output, "job failed: {err}").await;
                 errors = true;
             }
         }

@@ -232,10 +232,7 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
             }
             s.stop();
         }
-        Message::Log(entry) => println!(
-            "{} {} {} {}",
-            entry.level, entry.target, entry.name, entry.message
-        ),
+        Message::Log(entry) => println!("{} {} {}", entry.level, entry.name, entry.message),
         Message::SkippedJob(installation) => {
             state.results.insert(installation.id, JobStatus::Skipped);
             state.jobs.push(installation.clone());

@@ -46,13 +46,14 @@ use crate::duration::duration_string;
 use crate::helm::HelmResult;
 use crate::helm::Installation;
 use crate::helm::InstallationId;
-use crate::layer::LogEntry;
+use crate::logging::log;
+use crate::logging::LogEntry;
+use crate::logging::LogLevel;
 use crate::Request;
 
 use super::Message;
 use super::Output;
 use super::Sender;
-use crate::layer::log;
 
 pub struct TuiOutput {
     thread: Option<JoinHandle<Result<()>>>,
@@ -486,14 +487,14 @@ impl HasMultilineText for HelmResult {
     // }
 }
 
-fn get_log_style(level: tracing::Level) -> Style {
+fn get_log_style(level: LogLevel) -> Style {
     let style = Style::default();
     match level {
-        tracing::Level::ERROR => style.fg(Color::Red),
-        tracing::Level::WARN => style.fg(Color::Yellow),
-        tracing::Level::INFO => style.fg(Color::Green),
-        tracing::Level::DEBUG => style.fg(Color::White),
-        tracing::Level::TRACE => style.fg(Color::DarkGray),
+        LogLevel::Error => style.fg(Color::Red),
+        LogLevel::Warning => style.fg(Color::Yellow),
+        LogLevel::Info => style.fg(Color::Green),
+        LogLevel::Debug => style.fg(Color::White),
+        LogLevel::Trace => style.fg(Color::DarkGray),
     }
 }
 fn format_lines(str: &str, style: Style) -> Vec<Spans> {
@@ -673,7 +674,7 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
     match msg.as_ref() {
         Message::SkippedJob(i) => {
             let str = format!("Skipped Job {}", i.name);
-            state.logs.add_log(log!(tracing::Level::INFO, &str));
+            state.logs.add_log(log!(LogLevel::Info, &str));
             // Need to think about if we want skipped jobs to appear in list or not
             // state.job_status.insert(i.uuid, JobStatus::Skipped);
             // state.jobs.items.push(i);
@@ -684,12 +685,12 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
                     "Installation {} our version {our_version} upstream version {upstream_version}",
                     i.name
                 );
-                state.logs.add_log(log!(tracing::Level::INFO, &str));
+                state.logs.add_log(log!(LogLevel::Info, &str));
             }
         }
         Message::NewJob(i) => {
             let str = format!("Job {}", i.name);
-            state.logs.add_log(log!(tracing::Level::DEBUG, &str));
+            state.logs.add_log(log!(LogLevel::Debug, &str));
             state.job_status.insert(i.id, JobStatus::New);
             state.jobs.items.push(i.clone());
         }
@@ -698,14 +699,14 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
         }
         Message::StartedJob(i, start_instant) => {
             let str = format!("Started {}", i.name);
-            state.logs.add_log(log!(tracing::Level::INFO, &str));
+            state.logs.add_log(log!(LogLevel::Info, &str));
             state
                 .job_status
                 .insert(i.id, JobStatus::Started(*start_instant));
         }
         Message::FinishedJob(i, result, duration) => {
             let str = format!("Finished {}", i.name);
-            state.logs.add_log(log!(tracing::Level::INFO, &str));
+            state.logs.add_log(log!(LogLevel::Info, &str));
             state
                 .job_status
                 .insert(i.id, JobStatus::Finished(result.is_ok(), *duration));
@@ -725,7 +726,7 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
                 state.has_errors = true;
             };
             let str = format!("Finished Everything {}", duration_string(duration));
-            state.logs.add_log(log!(tracing::Level::INFO, &str));
+            state.logs.add_log(log!(LogLevel::Info, &str));
             state.finished = true;
             state.finished_duration = Some(*duration);
         }

@@ -3,7 +3,6 @@
 //! Define helm commands.
 //!
 //! This defines a list of commands that take a message to the output server and an installation to act on.
-use super::layer::log;
 use anyhow::Result;
 use semver::Version;
 use serde::Deserialize;
@@ -16,13 +15,12 @@ use std::{
     time::Duration,
 };
 use tap::Pipe;
-use tracing::{debug, error, Level};
 use url::Url;
 
 use crate::{
     command::{CommandLine, CommandResult, CommandSuccess},
     config::{AnnouncePolicy, ChartReference, ReleaseReference, ValuesFile, ValuesFormat},
-    output::{Message, MultiOutput},
+    output::{debug, error, info, Message, MultiOutput},
     HelmReposLock, Update,
 };
 
@@ -186,8 +184,9 @@ pub async fn add_repo(
         name: repo_name,
         url: repo_url,
     }: &HelmRepo,
+    output: &MultiOutput,
 ) -> Result<()> {
-    debug!("Add helm repo {} at {}... ", repo_name, repo_url);
+    debug!(output, "Add helm repo {} at {}... ", repo_name, repo_url).await;
 
     let command: CommandLine = CommandLine::new(
         "helm".into(),
@@ -202,12 +201,12 @@ pub async fn add_repo(
 
     let result = command.run().await;
     if let Err(err) = result {
-        error!("error installing helm repo");
-        error!("{}", err);
+        error!(output, "error installing helm repo").await;
+        error!(output, "{}", err).await;
         anyhow::bail!("helm repo add failed");
     }
 
-    debug!("done adding helm repo.");
+    debug!(output, "done adding helm repo.").await;
     Ok(())
 }
 
@@ -217,8 +216,9 @@ pub async fn remove_repo(
         name: repo_name,
         url: repo_url,
     }: &HelmRepo,
+    output: &MultiOutput,
 ) -> Result<()> {
-    debug!("Remove helm repo {} at {}... ", repo_name, repo_url);
+    debug!(output, "Remove helm repo {} at {}... ", repo_name, repo_url).await;
 
     let command: CommandLine = CommandLine::new(
         "helm".into(),
@@ -227,12 +227,12 @@ pub async fn remove_repo(
 
     let result = command.run().await;
     if let Err(err) = result {
-        error!("error removing helm repo");
-        error!("{}", err);
+        error!(output, "error removing helm repo").await;
+        error!(output, "{}", err).await;
         anyhow::bail!("helm repo remove failed");
     }
 
-    debug!("done removing helm repo.");
+    debug!(output, "done removing helm repo.").await;
     Ok(())
 }
 
@@ -380,9 +380,6 @@ pub enum DiffResult {
     Errors,
     Unknown,
 }
-async fn log_debug_message(tx: &MultiOutput, message: &str) {
-    tx.send(Message::Log(log!(Level::DEBUG, message))).await;
-}
 
 /// Run the helm diff command.
 pub async fn diff(
@@ -427,24 +424,24 @@ pub async fn diff(
     let diff_result = if let Ok(command_success) = &i_result.result {
         match command_success.exit_code {
             0 => {
-                log_debug_message(tx, "No changes detected!").await; // Exit code 0 indicates no changes.
+                debug!(tx, "No changes detected!").await; // Exit code 0 indicates no changes.
                 DiffResult::NoChanges
             }
             1 => {
-                log_debug_message(tx, "Errors encountered!").await; // Exit code 1 indicates errors.
+                error!(tx, "Errors encountered!").await; // Exit code 1 indicates errors.
                 DiffResult::Errors
             }
             2 => {
-                log_debug_message(tx, "Changes detected!").await; // Exit code 2 indicates changes.
+                debug!(tx, "Changes detected!").await; // Exit code 2 indicates changes.
                 DiffResult::Changes
             }
             _ => {
-                log_debug_message(tx, "Unknown exit code").await; // Any other exit code is considered unknown.
+                error!(tx, "Unknown exit code").await; // Any other exit code is considered unknown.
                 DiffResult::Unknown
             }
         }
     } else {
-        log_debug_message(tx, "Other exception encountered").await; // If the command result is an error, return Unknown.
+        debug!(tx, "Other exception encountered").await; // If the command result is an error, return Unknown.
         DiffResult::Unknown
     };
 
@@ -706,7 +703,8 @@ impl ParsedOci {
                 let rc = match &result {
                     Ok(CommandSuccess { stdout, .. }) => {
                         let details: OciDetails = serde_json::from_str(stdout)?;
-                        get_latest_version_from_details(details)
+                        get_latest_version_from_details(details, tx)
+                            .await
                             .map_or_else(|| Err(anyhow::anyhow!("no versions found")), Ok)
                     }
                     Err(err) => Err(anyhow::anyhow!("The describe-images command failed: {err}")),
@@ -732,7 +730,8 @@ impl ParsedOci {
                     .json()
                     .await?;
 
-                get_latest_version_from_tags(path, tags)
+                get_latest_version_from_tags(path, tags, tx)
+                    .await
                     .map_or_else(|| Err(anyhow::anyhow!("no versions found")), Ok)
             }
         }
@@ -778,7 +777,10 @@ fn parse_version(tag: &str) -> Result<Version> {
 }
 
 /// Get the latest version for the given `OciDetails`.
-fn get_latest_version_from_details(details: OciDetails) -> Option<Version> {
+async fn get_latest_version_from_details(
+    details: OciDetails,
+    output: &MultiOutput,
+) -> Option<Version> {
     let mut versions = vec![];
     for image in details.image_details {
         if let Some(tags) = image.image_tags {
@@ -788,10 +790,13 @@ fn get_latest_version_from_details(details: OciDetails) -> Option<Version> {
                 }
                 match parse_version(&tag) {
                     Ok(version) => versions.push(version),
-                    Err(err) => error!(
-                        "Cannot parse version {} {tag}: {err}",
-                        image.repository_name
-                    ),
+                    Err(err) => {
+                        error!(
+                            output,
+                            "Cannot parse version {} {tag}: {err}", image.repository_name
+                        )
+                        .await;
+                    }
                 }
             }
         }
@@ -802,7 +807,11 @@ fn get_latest_version_from_details(details: OciDetails) -> Option<Version> {
 }
 
 /// Get the latest version for the given `AwsTags`.
-fn get_latest_version_from_tags(path: &str, tags: AwsTags) -> Option<Version> {
+async fn get_latest_version_from_tags(
+    path: &str,
+    tags: AwsTags,
+    output: &MultiOutput,
+) -> Option<Version> {
     let mut versions = vec![];
     for tag in tags.tags {
         if is_ignorable_tag(&tag) {
@@ -810,7 +819,7 @@ fn get_latest_version_from_tags(path: &str, tags: AwsTags) -> Option<Version> {
         }
         match parse_version(&tag) {
             Ok(version) => versions.push(version),
-            Err(err) => error!("Cannot parse version {path} {tag}: {err}"),
+            Err(err) => error!(output, "Cannot parse version {path} {tag}: {err}").await,
         }
     }
 
@@ -859,11 +868,8 @@ pub async fn update(
     }
 
     let file = doc.to_string();
-    tx.send(Message::Log(log!(
-        Level::INFO,
-        &format!("Updating {path} to:\n{file}", path = path.display())
-    )))
-    .await;
+
+    info!(tx, "Updating {path} to:\n{file}", path = path.display()).await;
     std::fs::write(path, file)?;
     Ok(())
 }
