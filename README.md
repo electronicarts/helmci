@@ -198,6 +198,5 @@ As a result a Python program was written as an alternative solution. This is a r
 
 ## Current Limitations
 
-* Should integrate better with secrets mechanisms that do not store plain text version in working directory, such as sops.
 * Should be able to save hash of chart to ensure it is not unexpectedly changed upstream.
 * No idea how well `text` will work with github, only tested with gitlab.
