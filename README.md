@@ -198,7 +198,6 @@ As a result a Python program was written as an alternative solution. This is a r
 
 ## Current Limitations
 
-* Running helmci upgrade on chart that has not changed results in an upgrade regardless. Which depending on the chart could be slow, and adds useless helm metadata to Kubernetes. Ideally need some way to skip charts if nothing has really changed.
 * Should integrate better with secrets mechanisms that do not store plain text version in working directory, such as sops.
 * Should be able to save hash of chart to ensure it is not unexpectedly changed upstream.
 * No idea how well `text` will work with github, only tested with gitlab.
