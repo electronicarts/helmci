@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/electronicarts/helmci/compare/v1.0.0...v1.1.0) (2024-08-29)
+
+
+### Features
+
+* skip upgrade if no changes detected ([#379](https://github.com/electronicarts/helmci/issues/379)) ([d227422](https://github.com/electronicarts/helmci/commit/d227422d4df98abb5d63cda5dec902bae451dec9))
+
 ## [1.0.0](https://github.com/electronicarts/helmci/compare/v0.5.1...v1.0.0) (2024-05-29)
 
 
