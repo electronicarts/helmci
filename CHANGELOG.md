@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/electronicarts/helmci/compare/v1.2.0...v1.2.1) (2024-08-30)
+
+
+### Bug Fixes
+
+* Specify default rust crypto provider ([d1d0ecd](https://github.com/electronicarts/helmci/commit/d1d0ecdc8b55ae987dc62a3702e6408c02d6a36b))
+
 ## [1.2.0](https://github.com/electronicarts/helmci/compare/v1.1.0...v1.2.0) (2024-08-30)
 
 
