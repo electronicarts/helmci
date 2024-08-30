@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/electronicarts/helmci/compare/v1.1.0...v1.2.0) (2024-08-30)
+
+
+### Features
+
+* Use latest macos runner ([e4084e9](https://github.com/electronicarts/helmci/commit/e4084e9e463dd12336d82d40003140a8d3d40894))
+
 ## [1.1.0](https://github.com/electronicarts/helmci/compare/v1.0.0...v1.1.0) (2024-08-29)
 
 
