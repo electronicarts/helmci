@@ -421,9 +421,11 @@ fn get_output(output_format: OutputFormat) -> Result<(Box<dyn Output>, Sender)> 
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    rustls::crypto::aws_lc_rs::default_provider()
-        .install_default()
-        .expect("Failed to install rustls crypto provider");
+    if let Err(err) = rustls::crypto::aws_lc_rs::default_provider().install_default() {
+        return Err(anyhow::anyhow!(
+            "Failed to install rustls crypto provider: {err:?}"
+        ));
+    }
 
     let args = Args::parse();
 
