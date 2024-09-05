@@ -58,7 +58,7 @@ impl Display for Status {
             Status::Pending => '⚙',
             Status::InProgress => '☐',
             Status::Complete => '✅',
-            Status::Skipped => '𝄩',
+            Status::Skipped => '⏭',
             Status::Failed => '❌',
         };
         f.write_char(char)
