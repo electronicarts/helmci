@@ -452,7 +452,7 @@ pub async fn diff(
     tx.send(Message::InstallationResult(i_result.clone())).await;
 
     // Return the diff result.
-    Ok(diff_result?)
+    diff_result
 }
 
 /// Run the helm upgrade command.
