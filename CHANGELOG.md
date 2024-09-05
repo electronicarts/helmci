@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/electronicarts/helmci/compare/v1.3.0...v1.3.1) (2024-09-05)
+
+
+### Bug Fixes
+
+* attempt to make skipped symbol obvious under slack ([9e8d6a0](https://github.com/electronicarts/helmci/commit/9e8d6a0918701d683558143407caee8692513ccf))
+
 ## [1.3.0](https://github.com/electronicarts/helmci/compare/v1.2.1...v1.3.0) (2024-09-05)
 
 
