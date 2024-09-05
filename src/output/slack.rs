@@ -1,4 +1,5 @@
 // Copyright (C) 2022 Electronic Arts, Inc. All rights reserved.
+use super::JobSuccess;
 use super::Message;
 use super::Output;
 use super::Sender;
@@ -537,7 +538,8 @@ async fn process_message(msg: &Arc<Message>, state: &mut State, slack: &SlackSta
         }
         Message::FinishedJob(installation, result, duration) => {
             let status = match result {
-                Ok(()) => Status::Complete,
+                Ok(JobSuccess::Completed) => Status::Complete,
+                Ok(JobSuccess::Skipped) => Status::Skipped,
                 Err(_) => Status::Failed,
             };
             state

@@ -377,8 +377,6 @@ pub async fn template(
 pub enum DiffResult {
     NoChanges,
     Changes,
-    Errors,
-    Unknown,
 }
 
 /// Run the helm diff command.
@@ -421,36 +419,40 @@ pub async fn diff(
     let i_result = HelmResult::from_result(installation, result, Command::Diff);
 
     // Evaluate the detailed exit code - any non-zero exit code indicates changes (1) or errors (2).
-    let diff_result = if let Ok(command_success) = &i_result.result {
-        match command_success.exit_code {
-            0 => {
-                debug!(tx, "No changes detected!").await; // Exit code 0 indicates no changes.
-                DiffResult::NoChanges
-            }
-            1 => {
-                error!(tx, "Errors encountered!").await; // Exit code 1 indicates errors.
-                DiffResult::Errors
-            }
-            2 => {
-                debug!(tx, "Changes detected!").await; // Exit code 2 indicates changes.
-                DiffResult::Changes
-            }
-            _ => {
-                error!(tx, "Unknown exit code").await; // Any other exit code is considered unknown.
-                DiffResult::Unknown
-            }
+    let diff_result = match &i_result.result {
+        Ok(CommandSuccess { exit_code: 0, .. }) => {
+            debug!(tx, "No changes detected!").await; // Exit code 0 indicates no changes.
+            Ok(DiffResult::NoChanges)
         }
-    } else {
-        debug!(tx, "Other exception encountered").await; // If the command result is an error, return Unknown.
-        DiffResult::Unknown
+        Ok(CommandSuccess { exit_code: 1, .. }) => {
+            error!(tx, "errors encountered!").await; // exit code 1 indicates errors.
+            Err(anyhow::anyhow!("diff operation failed"))
+        }
+        Ok(CommandSuccess { exit_code: 2, .. }) => {
+            debug!(tx, "Changes detected!").await; // Exit code 2 indicates changes.
+            Ok(DiffResult::Changes)
+        }
+        Ok(CommandSuccess { .. }) => {
+            error!(tx, "Unknown exit code").await; // Any other exit code is considered unknown.
+            Err(anyhow::anyhow!(
+                "diff operation returned unknown error code"
+            ))
+        }
+        Err(err) => {
+            debug!(tx, "Other exception encountered").await; // If the command result is an error, return Unknown.
+            Err(anyhow::anyhow!(
+                "diff operation failed: {}",
+                err.to_string()
+            ))
+        }
     };
 
     // Wrap the HelmResult in an Arc and send it via the MultiOutput channel.
     let i_result = Arc::new(i_result);
-    tx.send(Message::InstallationResult(i_result)).await;
+    tx.send(Message::InstallationResult(i_result.clone())).await;
 
     // Return the diff result.
-    Ok(diff_result)
+    Ok(diff_result?)
 }
 
 /// Run the helm upgrade command.

@@ -1,4 +1,5 @@
 // Copyright (C) 2022 Electronic Arts, Inc. All rights reserved.
+use super::JobSuccess;
 use super::Message;
 use super::Output;
 use super::Sender;
@@ -234,7 +235,12 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
         }
         Message::Log(entry) => println!("{} {} {}", entry.level, entry.name, entry.message),
         Message::SkippedJob(installation) => {
-            state.results.insert(installation.id, JobStatus::Skipped);
+            state.results.insert(
+                installation.id,
+                JobStatus::Skipped {
+                    duration: Duration::ZERO,
+                },
+            );
             state.jobs.push(installation.clone());
         }
         Message::InstallationVersion(installation, our_version, upstream_version) => {
@@ -254,7 +260,10 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
         }
         Message::FinishedJob(installation, result, duration) => {
             let status = match result {
-                Ok(()) => JobStatus::Complete {
+                Ok(JobSuccess::Completed) => JobStatus::Complete {
+                    duration: *duration,
+                },
+                Ok(JobSuccess::Skipped) => JobStatus::Skipped {
                     duration: *duration,
                 },
                 Err(_) => JobStatus::Failed {
@@ -281,7 +290,7 @@ enum JobStatus {
     Pending,
     InProgress,
     Complete { duration: Duration },
-    Skipped,
+    Skipped { duration: Duration },
     Failed { duration: Duration },
 }
 
@@ -292,7 +301,7 @@ impl JobStatus {
             JobStatus::Pending => None,
             JobStatus::InProgress { .. } => None,
             JobStatus::Complete { duration } => Some(*duration),
-            JobStatus::Skipped => None,
+            JobStatus::Skipped { duration } => Some(*duration),
             JobStatus::Failed { duration } => Some(*duration),
         }
     }
@@ -302,7 +311,7 @@ impl JobStatus {
             JobStatus::Pending => Status::Pending,
             JobStatus::InProgress { .. } => Status::InProgress,
             JobStatus::Complete { .. } => Status::Complete,
-            JobStatus::Skipped => Status::Skipped,
+            JobStatus::Skipped { .. } => Status::Skipped,
             JobStatus::Failed { .. } => Status::Failed,
         }
     }

@@ -51,6 +51,7 @@ use crate::logging::LogEntry;
 use crate::logging::LogLevel;
 use crate::Request;
 
+use super::JobSuccess;
 use super::Message;
 use super::Output;
 use super::Sender;
@@ -335,8 +336,13 @@ impl HasRows for Installation {
             // Some(JobStatus::Skipped) => Style::default().fg(Color::DarkGray),
             Some(JobStatus::New) => Style::default().fg(Color::White),
             Some(JobStatus::Started(_)) => Style::default().fg(Color::Yellow),
-            Some(JobStatus::Finished(true, _)) => Style::default().fg(Color::Green),
-            Some(JobStatus::Finished(false, _)) => Style::default().fg(Color::Red),
+            Some(JobStatus::Finished(Ok(JobSuccess::Completed), _)) => {
+                Style::default().fg(Color::Green)
+            }
+            Some(JobStatus::Finished(Ok(JobSuccess::Skipped), _)) => {
+                Style::default().fg(Color::DarkGray)
+            }
+            Some(JobStatus::Finished(_, _)) => Style::default().fg(Color::Red),
             None => Style::default().fg(Color::Blue),
         };
         let duration = match status {
@@ -366,8 +372,13 @@ impl HasMultilineText for Installation {
             // Some(JobStatus::Skipped) => Style::default().fg(Color::DarkGray),
             Some(JobStatus::New) => Style::default().fg(Color::White),
             Some(JobStatus::Started(_)) => Style::default().fg(Color::Yellow),
-            Some(JobStatus::Finished(true, _)) => Style::default().fg(Color::Green),
-            Some(JobStatus::Finished(false, _)) => Style::default().fg(Color::Red),
+            Some(JobStatus::Finished(Ok(JobSuccess::Completed), _)) => {
+                Style::default().fg(Color::Green)
+            }
+            Some(JobStatus::Finished(Ok(JobSuccess::Skipped), _)) => {
+                Style::default().fg(Color::DarkGray)
+            }
+            Some(JobStatus::Finished(_, _)) => Style::default().fg(Color::Red),
             None => Style::default().fg(Color::Blue),
         };
         Spans::from(Span::styled(self.name.clone(), style))
@@ -513,7 +524,7 @@ enum JobStatus {
     // Skipped,
     New,
     Started(Instant),
-    Finished(bool, Duration),
+    Finished(Result<JobSuccess, String>, Duration),
 }
 
 enum DisplayMode {
@@ -709,7 +720,7 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
             state.logs.add_log(log!(LogLevel::Info, &str));
             state
                 .job_status
-                .insert(i.id, JobStatus::Finished(result.is_ok(), *duration));
+                .insert(i.id, JobStatus::Finished(result.clone(), *duration));
             if result.is_err() {
                 state.has_errors = true;
             }

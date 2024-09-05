@@ -19,6 +19,12 @@ pub mod slack;
 pub mod text;
 pub mod tui;
 
+#[derive(Clone, Copy, Debug)]
+pub enum JobSuccess {
+    Completed,
+    Skipped,
+}
+
 /// A message to the output module.
 #[derive(Debug)]
 pub enum Message {
@@ -33,7 +39,7 @@ pub enum Message {
     /// Notification that we started a job.
     StartedJob(Arc<Installation>, Instant),
     /// Notification that we finished a job.
-    FinishedJob(Arc<Installation>, Result<(), String>, Duration),
+    FinishedJob(Arc<Installation>, Result<JobSuccess, String>, Duration),
 
     /// A Log entry was logged.
     Log(LogEntry),

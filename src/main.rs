@@ -39,7 +39,7 @@ use depends::{is_depends_ok, HashIndex, InstallationSet};
 
 mod output;
 use output::{error, trace, warning};
-use output::{Message, MultiOutput, Output, Sender};
+use output::{JobSuccess, Message, MultiOutput, Output, Sender};
 
 mod config;
 use config::Release;
@@ -194,7 +194,7 @@ async fn run_job(
     installation: &Arc<Installation>,
     tx: &MultiOutput,
     upgrade_control: &UpgradeControl,
-) -> Result<()> {
+) -> Result<JobSuccess> {
     match command {
         Request::Upgrade { .. } => {
             let diff_result = helm::diff(installation, helm_repos, tx).await?;
@@ -204,43 +204,42 @@ async fn run_job(
                         UpgradeControl::BypassAndAssumeYes => {
                             helm::upgrade(installation, helm_repos, tx, true).await?;
                             helm::upgrade(installation, helm_repos, tx, false).await?;
+                            Ok(JobSuccess::Completed)
                         }
                         UpgradeControl::BypassAndAssumeNo | UpgradeControl::Normal => {
                             // Do nothing, as these are implicit or default cases
+                            Ok(JobSuccess::Skipped)
                         }
                     }
                 }
                 DiffResult::Changes => {
                     helm::upgrade(installation, helm_repos, tx, true).await?;
                     helm::upgrade(installation, helm_repos, tx, false).await?;
-                }
-                DiffResult::Errors | DiffResult::Unknown => {
-                    // Handle errors or unknown cases if needed.
+                    Ok(JobSuccess::Completed)
                 }
             }
-            Ok(())
         }
         Request::Diff { .. } => {
             helm::diff(installation, helm_repos, tx).await?;
-            Ok(())
+            Ok(JobSuccess::Completed)
         }
         Request::Test { .. } => {
             helm::outdated(installation, helm_repos, tx).await?;
             helm::lint(installation, tx).await?;
             helm::template(installation, helm_repos, tx).await?;
-            Ok(())
+            Ok(JobSuccess::Completed)
         }
         Request::Template { .. } => {
             helm::template(installation, helm_repos, tx).await?;
-            Ok(())
+            Ok(JobSuccess::Completed)
         }
         Request::Outdated { .. } => {
             helm::outdated(installation, helm_repos, tx).await?;
-            Ok(())
+            Ok(JobSuccess::Completed)
         }
         Request::Update { updates, .. } => {
             helm::update(installation, tx, updates).await?;
-            Ok(())
+            Ok(JobSuccess::Completed)
         }
     }
 }
@@ -905,16 +904,16 @@ async fn worker_thread(
         // Execute the job
         let result = run_job(command, helm_repos, &install, output, upgrade_control).await;
         match &result {
-            Ok(()) => {
-                tx_dispatch
-                    .send(Dispatch::Done(HashIndex::get_hash_index(&install)))
-                    .await?;
-            }
+            Ok(_) => {}
             Err(err) => {
                 error!(output, "job failed: {err}").await;
                 errors = true;
             }
         }
+
+        tx_dispatch
+            .send(Dispatch::Done(HashIndex::get_hash_index(&install)))
+            .await?;
 
         // Update UI
         let stop = Instant::now();
