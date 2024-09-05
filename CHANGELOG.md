@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.0](https://github.com/electronicarts/helmci/compare/v1.2.1...v1.3.0) (2024-09-05)
+
+
+### Features
+
+* Show in output when upgrade skipped due no changes ([311dddf](https://github.com/electronicarts/helmci/commit/311dddfc6ed30fbebff1fc381c582008ca8f2e82))
+
+
+### Bug Fixes
+
+* address clippy warning ([cfa13cd](https://github.com/electronicarts/helmci/commit/cfa13cd143b055b01073383caaee17f21fdfa494))
+* Fix clippy warning expect used ([8bbd0df](https://github.com/electronicarts/helmci/commit/8bbd0df91c008af95d1b94351e14308285622e49))
+
 ## [1.2.1](https://github.com/electronicarts/helmci/compare/v1.2.0...v1.2.1) (2024-08-30)
 
 
