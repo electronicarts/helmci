@@ -56,7 +56,7 @@ pub struct MultiOutput {
 }
 
 impl MultiOutput {
-    pub fn new(tx: Vec<Sender>) -> Self {
+    pub const fn new(tx: Vec<Sender>) -> Self {
         Self { tx }
     }
 

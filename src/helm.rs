@@ -725,7 +725,7 @@ impl ParsedOci {
                     .await?;
 
                 let tags: AwsTags = reqwest::Client::new()
-                    .get(&format!("https://public.ecr.aws/v2/{path}/tags/list"))
+                    .get(format!("https://public.ecr.aws/v2/{path}/tags/list"))
                     .header("Authorization", format!("Bearer {}", token.token))
                     .send()
                     .await?
