@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2](https://github.com/electronicarts/helmci/compare/v1.3.1...v1.3.2) (2024-10-17)
+
+
+### Bug Fixes
+
+* attempt to highlight stderr output and stdout/stderr error output ([26aa21f](https://github.com/electronicarts/helmci/commit/26aa21fe84640c662d4612b7ba7d984cde0392eb))
+
 ## [1.3.1](https://github.com/electronicarts/helmci/compare/v1.3.0...v1.3.1) (2024-09-05)
 
 
