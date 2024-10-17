@@ -57,7 +57,11 @@ impl Display for CommandSuccess {
         f.write_str("\n")?;
 
         f.write_str("stderr:\n")?;
-        f.write_str(&self.stderr)?;
+        for line in self.stderr.lines() {
+            f.write_str("--> ")?;
+            f.write_str(line)?;
+            f.write_str("\n")?;
+        }
         f.write_str("\n")?;
 
         Ok(())
@@ -118,11 +122,19 @@ impl Display for CommandError {
         f.write_str("\n")?;
 
         f.write_str("stdout:\n")?;
-        f.write_str(&self.stdout)?;
+        for line in self.stdout.lines() {
+            f.write_str("--> ")?;
+            f.write_str(line)?;
+            f.write_str("\n")?;
+        }
         f.write_str("\n")?;
 
         f.write_str("stderr:\n")?;
-        f.write_str(&self.stderr)?;
+        for line in self.stderr.lines() {
+            f.write_str("--> ")?;
+            f.write_str(line)?;
+            f.write_str("\n")?;
+        }
         f.write_str("\n")?;
 
         Ok(())
