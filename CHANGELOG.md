@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.3](https://github.com/electronicarts/helmci/compare/v1.3.2...v1.3.3) (2024-10-18)
+
+
+### Bug Fixes
+
+* filter out useless helm messages to slack ([4f68d2f](https://github.com/electronicarts/helmci/commit/4f68d2ff4216acda82289eefc5939d0eca1d53c2))
+
 ## [1.3.2](https://github.com/electronicarts/helmci/compare/v1.3.1...v1.3.2) (2024-10-17)
 
 
