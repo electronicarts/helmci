@@ -97,6 +97,15 @@ struct VersionResult<'a> {
     upstream_version: String,
 }
 
+fn filter_stderr(s: &str) -> String {
+    // Filter out useless messages from HELM, so good messages don't get truncated.
+    s.lines()
+        .filter(|line| !line.starts_with("Pulled: "))
+        .filter(|line| !line.starts_with("Digest: "))
+        .collect::<Vec<&str>>()
+        .join("\n")
+}
+
 fn truncate(s: &str, max_chars: usize) -> &str {
     match s.char_indices().nth(max_chars) {
         None => s,
@@ -406,7 +415,8 @@ impl SlackState {
             blocks.push(block.into());
         }
 
-        let string = truncate(hr.stderr(), 150);
+        let stderr = filter_stderr(hr.stderr());
+        let string = truncate(&stderr, 150);
         if !string.is_empty() {
             let string = format!("```{string}```\n");
             let markdown = SlackBlockMarkDownText::from(string);
