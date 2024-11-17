@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 
 use serde::de::Error;
 use serde::{Deserialize, Serialize, Serializer};
+use url::Url;
 
 use crate::utils::filename_to_string;
 
@@ -81,18 +82,36 @@ impl Serialize for ReleaseReference {
 pub enum ChartReference {
     #[serde(rename = "helm")]
     Helm {
-        repo_url: String,
+        repo_url: Url,
         chart_name: String,
         chart_version: String,
     },
     #[serde(rename = "oci")]
     Oci {
-        repo_url: String,
+        repo_url: Url,
         chart_name: String,
         chart_version: String,
     },
     #[serde(rename = "local")]
     Local { path: PathBuf },
+}
+
+impl std::fmt::Display for ChartReference {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ChartReference::Helm {
+                repo_url,
+                chart_name,
+                chart_version,
+            } => write!(f, "Helm: {repo_url}/{chart_name}:{chart_version}",),
+            ChartReference::Oci {
+                repo_url,
+                chart_name,
+                chart_version,
+            } => write!(f, "Oci: {repo_url}/{chart_name}:{chart_version}",),
+            ChartReference::Local { path } => write!(f, "Local: {path}", path = path.display()),
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -145,6 +164,7 @@ pub struct Release {
     pub name: String,
     pub dir: PathBuf,
     pub config_file: PathBuf,
+    pub lock_file: PathBuf,
     pub config: ReleaseConfig,
 }
 
@@ -243,6 +263,7 @@ impl Cluster {
     pub fn load_release(&self, dir_name: &str, overrides: &Overrides) -> Result<Release> {
         let dir = self.dir.join(dir_name);
         let config_file = dir.join("config.yaml");
+        let lock_file = dir.join("lock.json");
 
         let file: String = std::fs::read_to_string(&config_file)
             .with_context(|| format!("Reading file {}", config_file.display()))?;
@@ -257,6 +278,7 @@ impl Cluster {
             name: config.release.clone(),
             dir,
             config_file,
+            lock_file,
             config,
         })
     }

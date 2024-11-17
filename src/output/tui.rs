@@ -128,6 +128,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, state: &mut State) {
         Some(Request::Template { .. }) => "template",
         Some(Request::Outdated { .. }) => "outdated",
         Some(Request::Update { .. }) => "update",
+        Some(Request::RewriteLocks {}) => "rewrite-locks",
         None => "unknown",
     };
 

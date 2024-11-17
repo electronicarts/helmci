@@ -68,6 +68,7 @@ pub fn is_depends_ok(installation: &Installation, done: &InstallationSet) -> boo
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use std::path::PathBuf;
 
     use crate::config::{AnnouncePolicy, ChartReference};
@@ -81,11 +82,14 @@ mod tests {
             Installation {
                 name: "ingress-nginx-ext".to_string(),
                 config_file: "config.yaml".into(),
+                lock_file: "lock.json".into(),
                 values_files: vec![],
                 env_name: "dev".to_string(),
                 cluster_name: "spartan".to_string(),
                 chart_reference: ChartReference::Helm {
-                    repo_url: "https://kubernetes.github.io/ingress-nginx".to_string(),
+                    repo_url: "https://kubernetes.github.io/ingress-nginx"
+                        .parse()
+                        .unwrap(),
                     chart_name: "ingress-nginx".to_string(),
                     chart_version: "4.0.10".to_string(),
                 },
@@ -99,11 +103,14 @@ mod tests {
             Installation {
                 name: "ingress-nginx-ext-2".to_string(),
                 config_file: "config.yaml".into(),
+                lock_file: "lock.json".into(),
                 values_files: vec![],
                 env_name: "dev".to_string(),
                 cluster_name: "spartan".to_string(),
                 chart_reference: ChartReference::Helm {
-                    repo_url: "https://kubernetes.github.io/ingress-nginx".to_string(),
+                    repo_url: "https://kubernetes.github.io/ingress-nginx"
+                        .parse()
+                        .unwrap(),
                     chart_name: "ingress-nginx".to_string(),
                     chart_version: "4.0.10".to_string(),
                 },
@@ -117,6 +124,7 @@ mod tests {
             Installation {
                 name: "exporter-blackbox".to_string(),
                 config_file: "config.yaml".into(),
+                lock_file: "lock.json".into(),
                 values_files: vec![],
                 env_name: "dev".to_string(),
                 cluster_name: "spartan".to_string(),
@@ -136,6 +144,7 @@ mod tests {
             Installation {
                 name: "exporter-blackbox-2".to_string(),
                 config_file: "config.yaml".into(),
+                lock_file: "lock.json".into(),
                 values_files: vec![],
                 env_name: "dev".to_string(),
                 cluster_name: "spartan".to_string(),
@@ -173,11 +182,14 @@ mod tests {
             Installation {
                 name: "ingress-nginx-ext".to_string(),
                 config_file: "config.yaml".into(),
+                lock_file: "lock.json".into(),
                 values_files: vec![],
                 env_name: "dev".to_string(),
                 cluster_name: "spartan".to_string(),
                 chart_reference: ChartReference::Helm {
-                    repo_url: "https://kubernetes.github.io/ingress-nginx".to_string(),
+                    repo_url: "https://kubernetes.github.io/ingress-nginx"
+                        .parse()
+                        .unwrap(),
                     chart_name: "ingress-nginx".to_string(),
                     chart_version: "4.0.10".to_string(),
                 },
@@ -191,6 +203,7 @@ mod tests {
             Installation {
                 name: "exporter-blackbox".to_string(),
                 config_file: "config.yaml".into(),
+                lock_file: "lock.json".into(),
                 values_files: vec![],
                 env_name: "dev".to_string(),
                 cluster_name: "spartan".to_string(),
@@ -235,11 +248,14 @@ mod tests {
             Installation {
                 name: "ingress-nginx-ext".to_string(),
                 config_file: "config.yaml".into(),
+                lock_file: "lock.json".into(),
                 values_files: vec![],
                 env_name: "dev".to_string(),
                 cluster_name: "spartan".to_string(),
                 chart_reference: ChartReference::Helm {
-                    repo_url: "https://kubernetes.github.io/ingress-nginx".to_string(),
+                    repo_url: "https://kubernetes.github.io/ingress-nginx"
+                        .parse()
+                        .unwrap(),
                     chart_name: "ingress-nginx".to_string(),
                     chart_version: "4.0.10".to_string(),
                 },
@@ -256,6 +272,7 @@ mod tests {
             Installation {
                 name: "exporter-blackbox".to_string(),
                 config_file: "config.yaml".into(),
+                lock_file: "lock.json".into(),
                 values_files: vec![],
                 env_name: "dev".to_string(),
                 cluster_name: "spartan".to_string(),
@@ -293,11 +310,14 @@ mod tests {
         let todo = vec![Installation {
             name: "ingress-nginx-ext".to_string(),
             config_file: "config.yaml".into(),
+            lock_file: "lock.json".into(),
             values_files: vec![],
             env_name: "dev".to_string(),
             cluster_name: "spartan".to_string(),
             chart_reference: ChartReference::Helm {
-                repo_url: "https://kubernetes.github.io/ingress-nginx".to_string(),
+                repo_url: "https://kubernetes.github.io/ingress-nginx"
+                    .parse()
+                    .unwrap(),
                 chart_name: "ingress-nginx".to_string(),
                 chart_version: "4.0.10".to_string(),
             },
@@ -325,11 +345,14 @@ mod tests {
         let todo = vec![Installation {
             name: "ingress-nginx-ext".to_string(),
             config_file: "config.yaml".into(),
+            lock_file: "lock.json".into(),
             values_files: vec![],
             env_name: "dev".to_string(),
             cluster_name: "spartan".to_string(),
             chart_reference: ChartReference::Helm {
-                repo_url: "https://kubernetes.github.io/ingress-nginx".to_string(),
+                repo_url: "https://kubernetes.github.io/ingress-nginx"
+                    .parse()
+                    .unwrap(),
                 chart_name: "ingress-nginx".to_string(),
                 chart_version: "4.0.10".to_string(),
             },

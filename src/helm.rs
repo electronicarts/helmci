@@ -21,31 +21,32 @@ use crate::{
     command::{CommandLine, CommandResult, CommandSuccess},
     config::{AnnouncePolicy, ChartReference, ReleaseReference, ValuesFile, ValuesFormat},
     output::{debug, error, info, Message, MultiOutput},
-    HelmReposLock, Update,
+    repos::{charts::Chart, helm},
+    Update,
 };
 
-/// A reference to a Helm Repo.
-#[derive(Clone, Debug)]
-pub struct HelmRepo {
-    pub name: String,
-    pub url: String,
-}
+// /// A reference to a Helm Repo.
+// #[derive(Clone, Debug)]
+// pub struct HelmRepo {
+//     pub name: String,
+//     pub url: String,
+// }
 
-/// A reference to a helm chart.
-#[derive(Debug)]
-pub enum HelmChart<'a> {
-    Dir(PathBuf),
-    HelmRepo {
-        repo: &'a HelmRepo,
-        chart_name: String,
-        chart_version: String,
-    },
-    OciRepo {
-        repo_url: String,
-        chart_name: String,
-        chart_version: String,
-    },
-}
+// /// A reference to a helm chart.
+// #[derive(Debug)]
+// pub enum HelmChart<'a> {
+//     Dir(PathBuf),
+//     HelmRepo {
+//         repo: &'a HelmRepo,
+//         chart_name: String,
+//         chart_version: String,
+//     },
+//     OciRepo {
+//         repo_url: String,
+//         chart_name: String,
+//         chart_version: String,
+//     },
+// }
 
 fn helm_path() -> OsString {
     std::env::var_os("HELM_PATH").unwrap_or_else(|| "helm".into())
@@ -67,6 +68,7 @@ pub struct Installation {
     pub cluster_name: String,
     pub context: String,
     pub config_file: PathBuf,
+    pub lock_file: PathBuf,
     pub values_files: Vec<ValuesFile>,
     pub chart_reference: ChartReference,
     pub depends: Vec<ReleaseReference>,
@@ -83,6 +85,12 @@ impl Installation {
             ChartReference::Local { .. } => "local",
         }
     }
+}
+
+#[derive(Debug)]
+pub struct DownloadedInstallation {
+    pub installation: Arc<Installation>,
+    pub chart: Option<Chart>,
 }
 
 /// What command was requested?
@@ -178,66 +186,67 @@ impl HelmResult {
     }
 }
 
-/// Request to add a repo to helm.
-pub async fn add_repo(
-    HelmRepo {
-        name: repo_name,
-        url: repo_url,
-    }: &HelmRepo,
-    output: &MultiOutput,
-) -> Result<()> {
-    debug!(output, "Add helm repo {} at {}... ", repo_name, repo_url).await;
+// /// Request to add a repo to helm.
+// pub async fn add_repo(
+//     HelmRepo {
+//         name: repo_name,
+//         url: repo_url,
+//     }: &HelmRepo,
+//     output: &MultiOutput,
+// ) -> Result<()> {
+//     debug!(output, "Add helm repo {} at {}... ", repo_name, repo_url).await;
 
-    let command: CommandLine = CommandLine::new(
-        "helm".into(),
-        vec![
-            "repo".into(),
-            "add".into(),
-            "--force-update".into(),
-            repo_name.into(),
-            repo_url.into(),
-        ],
-    );
+//     let command: CommandLine = CommandLine::new(
+//         "helm".into(),
+//         vec![
+//             "repo".into(),
+//             "add".into(),
+//             "--force-update".into(),
+//             repo_name.into(),
+//             repo_url.into(),
+//         ],
+//     );
 
-    let result = command.run().await;
-    if let Err(err) = result {
-        error!(output, "error installing helm repo").await;
-        error!(output, "{}", err).await;
-        anyhow::bail!("helm repo add failed");
-    }
+//     let result = command.run().await;
+//     if let Err(err) = result {
+//         error!(output, "error installing helm repo").await;
+//         error!(output, "{}", err).await;
+//         anyhow::bail!("helm repo add failed");
+//     }
 
-    debug!(output, "done adding helm repo.").await;
-    Ok(())
-}
+//     debug!(output, "done adding helm repo.").await;
+//     Ok(())
+// }
 
-/// Request to remote a repo from helm.
-pub async fn remove_repo(
-    HelmRepo {
-        name: repo_name,
-        url: repo_url,
-    }: &HelmRepo,
-    output: &MultiOutput,
-) -> Result<()> {
-    debug!(output, "Remove helm repo {} at {}... ", repo_name, repo_url).await;
+// /// Request to remote a repo from helm.
+// pub async fn remove_repo(
+//     HelmRepo {
+//         name: repo_name,
+//         url: repo_url,
+//     }: &HelmRepo,
+//     output: &MultiOutput,
+// ) -> Result<()> {
+//     debug!(output, "Remove helm repo {} at {}... ", repo_name, repo_url).await;
 
-    let command: CommandLine = CommandLine::new(
-        "helm".into(),
-        vec!["repo".into(), "remove".into(), repo_name.into()],
-    );
+//     let command: CommandLine = CommandLine::new(
+//         "helm".into(),
+//         vec!["repo".into(), "remove".into(), repo_name.into()],
+//     );
 
-    let result = command.run().await;
-    if let Err(err) = result {
-        error!(output, "error removing helm repo").await;
-        error!(output, "{}", err).await;
-        anyhow::bail!("helm repo remove failed");
-    }
+//     let result = command.run().await;
+//     if let Err(err) = result {
+//         error!(output, "error removing helm repo").await;
+//         error!(output, "{}", err).await;
+//         anyhow::bail!("helm repo remove failed");
+//     }
 
-    debug!(output, "done removing helm repo.").await;
-    Ok(())
-}
+//     debug!(output, "done removing helm repo.").await;
+//     Ok(())
+// }
 
 /// Run the lint command.
-pub async fn lint(installation: &Arc<Installation>, tx: &MultiOutput) -> Result<()> {
+pub async fn lint(downloaded: &DownloadedInstallation, tx: &MultiOutput) -> Result<()> {
+    let installation = &downloaded.installation;
     if let ChartReference::Local { path } = &installation.chart_reference {
         let mut args = vec![
             "lint".into(),
@@ -305,44 +314,17 @@ fn get_template_parameters(installation: &Installation) -> Vec<OsString> {
 }
 
 /// Get the required helm arguments for this chart.
-fn get_args_from_chart(chart: &HelmChart) -> (OsString, Vec<OsString>) {
-    let (chart_name, version) = match &chart {
-        HelmChart::Dir(dir) => (dir.clone().into_os_string(), None),
-        HelmChart::HelmRepo {
-            repo,
-            chart_name,
-            chart_version,
-        } => (
-            format!("{}/{chart_name}", repo.name).into(),
-            Some(chart_version),
-        ),
-        HelmChart::OciRepo {
-            repo_url,
-            chart_name,
-            chart_version,
-        } => (
-            format!("{repo_url}/{chart_name}").into(),
-            Some(chart_version),
-        ),
-    };
-
-    let mut args = vec![];
-    if let Some(version) = version {
-        args.push("--version".into());
-        args.push(version.into());
-    }
-
-    (chart_name, args)
+fn get_args_from_chart(chart: &Chart) -> (OsString, Vec<OsString>) {
+    (chart.file_path.clone().into(), vec![])
 }
 
 /// Run the helm template command.
-pub async fn template(
-    installation: &Arc<Installation>,
-    repos: &HelmReposLock,
-    tx: &MultiOutput,
-) -> Result<()> {
-    let chart = repos.get_helm_chart(&installation.chart_reference)?;
-    let (chart, mut chart_args) = get_args_from_chart(&chart);
+pub async fn template(downloaded: &DownloadedInstallation, tx: &MultiOutput) -> Result<()> {
+    let installation = &downloaded.installation;
+    let Some(chart) = &downloaded.chart else {
+        return Err(anyhow::anyhow!("chart not downloaded"));
+    };
+    let (chart, mut chart_args) = get_args_from_chart(chart);
 
     let mut args = vec![
         "template".into(),
@@ -380,15 +362,12 @@ pub enum DiffResult {
 }
 
 /// Run the helm diff command.
-pub async fn diff(
-    installation: &Arc<Installation>,
-    helm_repos: &HelmReposLock,
-    tx: &MultiOutput,
-) -> Result<DiffResult> {
-    // Retrieve the helm chart for the given installation.
-    let chart = helm_repos.get_helm_chart(&installation.chart_reference)?;
-    // Get the chart arguments from the chart.
-    let (chart, mut chart_args) = get_args_from_chart(&chart);
+pub async fn diff(downloaded: &DownloadedInstallation, tx: &MultiOutput) -> Result<DiffResult> {
+    let installation = &downloaded.installation;
+    let Some(chart) = &downloaded.chart else {
+        return Err(anyhow::anyhow!("chart not downloaded"));
+    };
+    let (chart, mut chart_args) = get_args_from_chart(chart);
 
     // Construct the arguments for the helm diff command.
     let mut args = vec![
@@ -457,13 +436,15 @@ pub async fn diff(
 
 /// Run the helm upgrade command.
 pub async fn upgrade(
-    installation: &Arc<Installation>,
-    repos: &HelmReposLock,
+    downloaded: &DownloadedInstallation,
     tx: &MultiOutput,
     dry_run: bool,
 ) -> Result<()> {
-    let chart = repos.get_helm_chart(&installation.chart_reference)?;
-    let (chart, mut chart_args) = get_args_from_chart(&chart);
+    let installation = &downloaded.installation;
+    let Some(chart) = &downloaded.chart else {
+        return Err(anyhow::anyhow!("chart not downloaded"));
+    };
+    let (chart, mut chart_args) = get_args_from_chart(chart);
 
     let mut args = vec![
         "upgrade".into(),
@@ -507,20 +488,17 @@ pub async fn upgrade(
 }
 
 /// Run the helm outdated command.
-pub async fn outdated(
-    installation: &Arc<Installation>,
-    repos: &HelmReposLock,
-    tx: &MultiOutput,
-) -> Result<()> {
-    let chart = repos.get_helm_chart(&installation.chart_reference)?;
-    match &chart {
-        HelmChart::Dir(_) => {}
-        HelmChart::HelmRepo {
-            repo,
+pub async fn outdated(downloaded: &DownloadedInstallation, tx: &MultiOutput) -> Result<()> {
+    let installation = &downloaded.installation;
+
+    match &installation.chart_reference {
+        ChartReference::Local { .. } => {}
+        ChartReference::Helm {
+            repo_url,
             chart_name,
             chart_version,
-        } => outdated_helm_chart(installation, repo, chart_name, chart_version, tx).await?,
-        HelmChart::OciRepo {
+        } => outdated_helm_chart(installation, repo_url, chart_name, chart_version, tx).await?,
+        ChartReference::Oci {
             repo_url,
             chart_name,
             chart_version,
@@ -542,7 +520,7 @@ struct HelmVersionInfo {
 /// Generate the outdated report for a helm chart reference.
 async fn outdated_helm_chart(
     installation: &Arc<Installation>,
-    repo: &HelmRepo,
+    repo_url: &Url,
     chart_name: &str,
     chart_version: &str,
     tx: &MultiOutput,
@@ -554,42 +532,23 @@ async fn outdated_helm_chart(
     let chart_version = parse_version(chart_version)
         .map_err(|err| anyhow::anyhow!("Failed to parse version {chart_version:?} {err:?}"))?;
 
-    let args = vec![
-        "search".into(),
-        "repo".into(),
-        "-o=json".into(),
-        format!("{}/{chart_name}", repo.name).into(),
-    ];
+    let repo = helm::Repo::download_index(repo_url).await?;
 
-    let command_line = CommandLine::new(helm_path(), args);
-    let result = command_line.run().await;
-    let has_errors = result.is_err();
-
-    if let Ok(CommandSuccess { stdout, .. }) = &result {
-        let version: Vec<HelmVersionInfo> = serde_json::from_str(stdout)?;
-        let version = version.first().ok_or_else(|| {
-            anyhow::anyhow!("No version information found for chart {chart_name}")
-        })?;
-        let version = parse_version(&version.version)
-            .map_err(|err| anyhow::anyhow!("Failed to parse version {version:?} {err:?}"))?;
-
-        tx.send(Message::InstallationVersion(
-            installation.clone(),
-            chart_version,
-            version,
-        ))
-        .await;
-    };
-
-    let i_result = HelmResult::from_result(installation, result, Command::Outdated);
-    let i_result = Arc::new(i_result);
-    tx.send(Message::InstallationResult(i_result)).await;
-
-    if has_errors {
-        Err(anyhow::anyhow!("outdated operation failed"))
-    } else {
-        Ok(())
+    match repo.get_newest_version(chart_name) {
+        Ok(version) => {
+            tx.send(Message::InstallationVersion(
+                installation.clone(),
+                chart_version,
+                version,
+            ))
+            .await;
+        }
+        Err(err) => {
+            return Err(err.into());
+        }
     }
+
+    Ok(())
 }
 
 /// Parser to interpret OCI information.
@@ -743,7 +702,7 @@ impl ParsedOci {
 /// Generate the outdated report for an OCI chart reference stored on ECR.
 async fn outdated_oci_chart(
     installation: &Arc<Installation>,
-    repo_url: &str,
+    repo_url: &Url,
     chart_name: &str,
     chart_version: &str,
     tx: &MultiOutput,
@@ -755,8 +714,7 @@ async fn outdated_oci_chart(
     let chart_version = parse_version(chart_version)
         .map_err(|err| anyhow::anyhow!("Failed to parse version {chart_version:?} {err:?}"))?;
 
-    let url = Url::parse(repo_url)?;
-    let parsed = ParsedOci::new(&url, chart_name)?;
+    let parsed = ParsedOci::new(repo_url, chart_name)?;
 
     let latest_version = parsed
         .get_latest_version(installation, tx)
@@ -838,11 +796,11 @@ fn is_ignorable_tag(tag: &str) -> bool {
 }
 
 pub async fn update(
-    installation: &Arc<Installation>,
+    installation: &Arc<DownloadedInstallation>,
     tx: &MultiOutput,
     updates: &Vec<Update>,
 ) -> Result<()> {
-    let path = &installation.config_file;
+    let path = &installation.installation.config_file;
     let file = read_to_string(path)?;
     let mut doc = nondestructive::yaml::from_slice(file)?;
 

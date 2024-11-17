@@ -359,6 +359,7 @@ impl SlackState {
                     Some(Request::Template { .. }) => "templated with",
                     Some(Request::Outdated { .. }) => "version checked with",
                     Some(Request::Update { .. }) => "updated values",
+                    Some(Request::RewriteLocks {}) => "rewrote locks",
                     None => "processed",
                 };
                 let cluster = installation.cluster_name.clone();
@@ -489,6 +490,7 @@ fn slack_title(state: &State) -> String {
         Some(Request::Template { .. }) => "template",
         Some(Request::Outdated { .. }) => "outdated",
         Some(Request::Update { .. }) => "update",
+        Some(Request::RewriteLocks {}) => "rewrite locks",
         None => "unknown",
     };
     format!("helmci - {task}")
