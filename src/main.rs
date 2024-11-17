@@ -11,7 +11,6 @@
 
 extern crate lazy_static;
 
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::str::{self, FromStr};
 use std::sync::Arc;
@@ -22,7 +21,10 @@ use anyhow::{anyhow, Context};
 use clap::Parser;
 use clap::Subcommand;
 
-use futures::Future;
+use repos::cache::Cache;
+use repos::locks::Lock;
+use repos::{download_by_reference, Repos};
+use tap::Pipe;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
@@ -30,15 +32,15 @@ use tokio::time::Instant;
 mod command;
 
 mod helm;
-use helm::DiffResult;
-use helm::{HelmChart, Installation};
-use helm::{HelmRepo, InstallationId};
+use helm::Installation;
+use helm::InstallationId;
+use helm::{DiffResult, DownloadedInstallation};
 
 mod depends;
 use depends::{is_depends_ok, HashIndex, InstallationSet};
 
 mod output;
-use output::{error, trace, warning};
+use output::{error, info, trace, warning};
 use output::{JobSuccess, Message, MultiOutput, Output, Sender};
 
 mod config;
@@ -51,6 +53,12 @@ mod logging;
 mod duration;
 
 mod utils;
+
+mod repos;
+
+mod versions;
+
+mod urls;
 
 /// An individual update
 #[derive(Clone, Debug)]
@@ -86,124 +94,31 @@ impl FromStr for Update {
     }
 }
 
-fn get_required_repos(todo: &[Arc<Installation>]) -> Vec<HelmRepo> {
-    let mut repos = HashMap::with_capacity(todo.len());
-    let mut next_id = 0;
+async fn get_required_repos(todo: &[Arc<Installation>]) -> Result<Repos> {
+    let mut repos = Repos::new();
 
     for installation in todo {
-        if let ChartReference::Helm { repo_url, .. } = &installation.chart_reference {
-            repos.insert(
-                repo_url,
-                HelmRepo {
-                    name: format!("helm_{next_id}"),
-                    url: repo_url.clone(),
-                },
-            );
-            next_id += 1;
-        }
+        repos.download(&installation.chart_reference).await?;
     }
 
-    repos.into_values().collect()
-}
-
-struct HelmReposLock(Vec<HelmRepo>, Option<oneshot::Sender<()>>);
-
-impl HelmReposLock {
-    fn get_helm_chart<'a>(&'a self, reference: &ChartReference) -> Result<HelmChart<'a>> {
-        match reference {
-            ChartReference::Helm {
-                repo_url,
-                chart_name,
-                chart_version,
-            } => {
-                let chart_name = chart_name.clone();
-                let chart_version = chart_version.clone();
-                let repo = self
-                    .0
-                    .iter()
-                    .find(|repo| repo.url == *repo_url)
-                    .ok_or_else(|| anyhow!("no such repo: {}", repo_url))?;
-                Ok(HelmChart::HelmRepo {
-                    repo,
-                    chart_name,
-                    chart_version,
-                })
-            }
-            ChartReference::Oci {
-                repo_url,
-                chart_name,
-                chart_version,
-            } => {
-                let chart_name = chart_name.clone();
-                let chart_version = chart_version.clone();
-                let repo_url = repo_url.clone();
-                Ok(HelmChart::OciRepo {
-                    repo_url,
-                    chart_name,
-                    chart_version,
-                })
-            }
-            ChartReference::Local { path } => Ok(HelmChart::Dir(path.clone())),
-        }
-    }
-}
-
-impl Drop for HelmReposLock {
-    fn drop(&mut self) {
-        // Send signal saying value has been dropped.
-        if let Some(sender) = self.1.take() {
-            if sender.send(()) == Err(()) {
-                print!("failed to send drop signal");
-            }
-        }
-    }
-}
-
-async fn with_helm_repos<T, FUT, FN>(repos: Vec<HelmRepo>, output: &MultiOutput, f: FN) -> Result<T>
-where
-    T: Sized + Send,
-    FUT: Future<Output = T> + Send,
-    FN: FnOnce(Arc<HelmReposLock>) -> FUT + Send,
-{
-    // Add these repos
-    for repo in &repos {
-        helm::add_repo(repo, output).await?;
-    }
-
-    let clone = repos.clone();
-    let (tx, rx) = oneshot::channel();
-    let lock = Arc::new(HelmReposLock(repos, Some(tx)));
-
-    let rc = f(lock).await;
-
-    // Because we sent value as Arc, it may still be in use.
-    // Wait for signal saying it has been dropped.
-    // Note: we must not be holding the lock value here!
-    rx.await?;
-
-    for repo in &clone {
-        helm::remove_repo(repo, output).await?;
-    }
-
-    Ok(rc)
+    Ok(repos)
 }
 
 async fn run_job(
     command: &Request,
-    helm_repos: &HelmReposLock,
-    installation: &Arc<Installation>,
+    installation: &Arc<DownloadedInstallation>,
     tx: &MultiOutput,
     upgrade_control: &UpgradeControl,
 ) -> Result<JobSuccess> {
     match command {
         Request::Upgrade { .. } => {
-            let diff_result = helm::diff(installation, helm_repos, tx).await?;
+            let diff_result = helm::diff(installation, tx).await?;
             match diff_result {
                 DiffResult::NoChanges => {
                     match upgrade_control {
                         UpgradeControl::BypassAndAssumeYes => {
-                            helm::upgrade(installation, helm_repos, tx, true).await?;
-                            helm::upgrade(installation, helm_repos, tx, false).await?;
+                            helm::upgrade(installation, tx, true).await?;
+                            helm::upgrade(installation, tx, false).await?;
                             Ok(JobSuccess::Completed)
                         }
                         UpgradeControl::BypassAndAssumeNo | UpgradeControl::Normal => {
@@ -213,33 +128,39 @@ async fn run_job(
                     }
                 }
                 DiffResult::Changes => {
-                    helm::upgrade(installation, helm_repos, tx, true).await?;
-                    helm::upgrade(installation, helm_repos, tx, false).await?;
+                    helm::upgrade(installation, tx, true).await?;
+                    helm::upgrade(installation, tx, false).await?;
                     Ok(JobSuccess::Completed)
                 }
             }
         }
         Request::Diff { .. } => {
-            helm::diff(installation, helm_repos, tx).await?;
+            helm::diff(installation, tx).await?;
             Ok(JobSuccess::Completed)
         }
         Request::Test { .. } => {
-            helm::outdated(installation, helm_repos, tx).await?;
+            helm::outdated(installation, tx).await?;
             helm::lint(installation, tx).await?;
-            helm::template(installation, helm_repos, tx).await?;
+            helm::template(installation, tx).await?;
             Ok(JobSuccess::Completed)
         }
         Request::Template { .. } => {
-            helm::template(installation, helm_repos, tx).await?;
+            helm::template(installation, tx).await?;
             Ok(JobSuccess::Completed)
         }
         Request::Outdated { .. } => {
-            helm::outdated(installation, helm_repos, tx).await?;
+            helm::outdated(installation, tx).await?;
             Ok(JobSuccess::Completed)
         }
         Request::Update { updates, .. } => {
             helm::update(installation, tx, updates).await?;
             Ok(JobSuccess::Completed)
+        }
+        Request::RewriteLocks { .. } => {
+            // This requires access to cache directory
+            // which cannot be done concurrently so
+            // this not done here.
+            Ok(JobSuccess::Skipped)
         }
     }
 }
@@ -278,7 +199,7 @@ struct Args {
 
     /// The source directory containing the helm-values.
     #[clap(long)]
-    vdir: String,
+    vdir: PathBuf,
 
     /// Provide an override file to use.
     #[clap(long)]
@@ -328,6 +249,9 @@ enum Request {
         /// List of changes
         updates: Vec<Update>,
     },
+
+    /// Rewrite lock files.
+    RewriteLocks,
 }
 
 #[derive(Clone, Debug)]
@@ -394,8 +318,9 @@ impl Request {
             Self::Diff { .. } => true,
             Self::Test { .. } => true,
             Self::Template { .. } => true,
-            Self::Outdated { .. } => true,
+            Self::Outdated { .. } => false,
             Self::Update { .. } => false,
+            Self::RewriteLocks { .. } => false,
         }
     }
 }
@@ -523,8 +448,6 @@ async fn do_task(
     output: &output::MultiOutput,
     upgrade_control: UpgradeControl,
 ) -> Result<()> {
-    // let mut helm_repos = HelmRepos::new();
-
     let (skipped_list, todo) = generate_todo(args, output).await?;
 
     let mut skipped = InstallationSet::new();
@@ -533,8 +456,8 @@ async fn do_task(
         output.send(Message::SkippedJob(item)).await;
     }
 
-    // let jobs: Jobs = (command, todo);
-    run_jobs_concurrently(command, todo, output, skipped, &upgrade_control).await
+    let cache = Cache::new(&args.vdir);
+    run_jobs_concurrently(command, cache, todo, output, skipped, &upgrade_control).await
 }
 
 type SkippedResult = Arc<Installation>;
@@ -700,6 +623,7 @@ fn create_installation(
     Installation {
         name: release.name,
         config_file: release.config_file,
+        lock_file: release.lock_file,
         namespace: release.config.namespace,
         env_name: env.name.clone(),
         cluster_name: cluster.name.clone(),
@@ -717,7 +641,7 @@ const NUM_THREADS: usize = 6;
 
 #[derive(Debug)]
 enum Dispatch {
-    RequestNextJob(oneshot::Sender<Option<Arc<Installation>>>),
+    RequestNextJob(oneshot::Sender<Option<Arc<DownloadedInstallation>>>),
     Done(HashIndex),
 }
 
@@ -727,31 +651,117 @@ fn is_ok(do_depends: bool, some_i: Option<&Arc<Installation>>, done: &Installati
 
 async fn run_jobs_concurrently(
     request: Arc<Request>,
+    cache: Cache,
     todo: Vec<Arc<Installation>>,
     output: &output::MultiOutput,
     skipped: InstallationSet,
     upgrade_control: &UpgradeControl,
 ) -> Result<()> {
-    let required_repos = if request.requires_helm_repos() {
-        get_required_repos(&todo)
-    } else {
-        vec![]
-    };
-    let rc = with_helm_repos(required_repos, output, |repos| async {
-        run_jobs_concurrently_with_repos(request, todo, output, skipped, repos, *upgrade_control)
-            .await
-    })
-    .await;
+    let downloaded_installations = if request.requires_helm_repos() {
+        info!(output, "Downloading repos").await;
+        let repos = get_required_repos(&todo).await?;
 
-    rc?
+        let mut downloaded = Vec::with_capacity(todo.len());
+        for installation in &todo {
+            let lock = Lock::load(&installation.lock_file)?;
+            let meta = lock.meta;
+            info!(
+                output,
+                "Downloading chart {} using {:?}", installation.chart_reference, meta
+            )
+            .await;
+            let chart =
+                repos::download_by_meta(&repos, &cache, &meta, &installation.chart_reference)
+                    .await
+                    .map_err(|e| {
+                        anyhow!(
+                            "Failed to download chart for installation: {} - {}",
+                            installation.name,
+                            e
+                        )
+                    })?;
+            DownloadedInstallation {
+                installation: installation.clone(),
+                chart: Some(chart),
+            }
+            .pipe(Arc::new)
+            .pipe(|x| downloaded.push(x));
+        }
+        downloaded
+    } else {
+        let mut downloaded = Vec::with_capacity(todo.len());
+        for installation in &todo {
+            DownloadedInstallation {
+                installation: installation.clone(),
+                chart: None,
+            }
+            .pipe(Arc::new)
+            .pipe(|x| downloaded.push(x));
+        }
+        downloaded
+    };
+
+    if !matches!(*request, Request::RewriteLocks) {
+        run_jobs_concurrently_with_repos(
+            request.clone(),
+            downloaded_installations,
+            output,
+            skipped,
+            *upgrade_control,
+        )
+        .await?;
+    }
+
+    if matches!(*request, Request::RewriteLocks | Request::Update { .. }) {
+        info!(output, "Downloading repos").await;
+        let repos = get_required_repos(&todo).await?;
+
+        for installation in todo {
+            let lock_file = &installation.lock_file;
+
+            info!(output, "Rewriting lock file {}", lock_file.display()).await;
+            let old = if lock_file.exists() {
+                Some(Lock::load(lock_file)?)
+            } else {
+                None
+            };
+
+            info!(output, "Downloading chart {}", installation.chart_reference).await;
+
+            // Reload the release file because it may have changed
+            // particularly with the `Request::Update`` command
+            let release = serde_yml::from_str::<config::ReleaseConfig>(&std::fs::read_to_string(
+                &installation.config_file,
+            )?)
+            .context("Failed to parse config file")?;
+
+            let chart = download_by_reference(&repos, &cache, &release.release_chart).await?;
+            let new = Lock::new(chart.meta);
+
+            if let Some(old) = old {
+                if old.meta == new.meta {
+                    info!(output, "No change to lock file {}", lock_file.display()).await;
+                } else {
+                    info!(output, "Updated lock file {}", lock_file.display()).await;
+                    new.save(lock_file)?;
+                }
+            } else {
+                info!(output, "Created lock file {}", lock_file.display()).await;
+                new.save(lock_file)?;
+            }
+        }
+
+        return Ok(());
+    }
+
+    Ok(())
 }
 
 async fn run_jobs_concurrently_with_repos(
     request: Arc<Request>,
-    todo: Vec<Arc<Installation>>,
+    todo: Vec<Arc<DownloadedInstallation>>,
     output: &output::MultiOutput,
     skipped: InstallationSet,
-    helm_repos: Arc<HelmReposLock>,
     upgrade_control: UpgradeControl,
 ) -> Result<()> {
     let do_depends = request.do_depends();
@@ -759,7 +769,7 @@ async fn run_jobs_concurrently_with_repos(
     // let task = jobs.0.clone();
 
     for i in &todo {
-        output.send(Message::NewJob(i.clone())).await;
+        output.send(Message::NewJob(i.installation.clone())).await;
     }
 
     // This process receives requests for jobs and dispatches them
@@ -775,16 +785,8 @@ async fn run_jobs_concurrently_with_repos(
             let tx_dispatch = tx_dispatch.clone();
             let output = output.clone();
             let request = request.clone();
-            let helm_repos = helm_repos.clone();
             tokio::spawn(async move {
-                worker_thread(
-                    &request,
-                    &helm_repos,
-                    &tx_dispatch,
-                    &output,
-                    &upgrade_control,
-                )
-                .await
+                worker_thread(&request, &tx_dispatch, &output, &upgrade_control).await
             })
         })
         .collect();
@@ -835,13 +837,14 @@ async fn run_jobs_concurrently_with_repos(
 }
 
 async fn dispatch_thread(
-    todo: Vec<Arc<Installation>>,
+    todo: Vec<Arc<DownloadedInstallation>>,
     skipped: InstallationSet,
     mut rx_dispatch: mpsc::Receiver<Dispatch>,
     do_depends: bool,
     output: &MultiOutput,
 ) -> Result<(), anyhow::Error> {
-    let mut installations: Vec<Option<&Arc<Installation>>> = todo.iter().map(Some).collect();
+    let mut installations: Vec<Option<&Arc<DownloadedInstallation>>> =
+        todo.iter().map(Some).collect();
     let mut done = skipped;
     while let Some(msg) = rx_dispatch.recv().await {
         match msg {
@@ -849,7 +852,7 @@ async fn dispatch_thread(
                 // Search for first available installation that meets dependancies.
                 let some_i = installations
                     .iter_mut()
-                    .find(|i| is_ok(do_depends, **i, &done))
+                    .find(|i| is_ok(do_depends, i.map(|i| &i.installation), &done))
                     .and_then(std::option::Option::take)
                     .map(std::borrow::ToOwned::to_owned);
 
@@ -868,7 +871,7 @@ async fn dispatch_thread(
     } else {
         let pending = remaining.iter().filter_map(|i| **i);
         for i in pending {
-            error!(output, "Still pending {:?}", i.name).await;
+            error!(output, "Still pending {:?}", i.installation.name).await;
         }
         Err(anyhow::anyhow!(
             "Installations still pending; probably broken dependancies"
@@ -878,7 +881,6 @@ async fn dispatch_thread(
 
 async fn worker_thread(
     command: &Request,
-    helm_repos: &HelmReposLock,
     tx_dispatch: &mpsc::Sender<Dispatch>,
     output: &MultiOutput,
     upgrade_control: &UpgradeControl,
@@ -898,11 +900,11 @@ async fn worker_thread(
         // Update UI
         let start = Instant::now();
         output
-            .send(Message::StartedJob(install.clone(), start))
+            .send(Message::StartedJob(install.installation.clone(), start))
             .await;
 
         // Execute the job
-        let result = run_job(command, helm_repos, &install, output, upgrade_control).await;
+        let result = run_job(command, &install, output, upgrade_control).await;
         match &result {
             Ok(_) => {}
             Err(err) => {
@@ -912,14 +914,16 @@ async fn worker_thread(
         }
 
         tx_dispatch
-            .send(Dispatch::Done(HashIndex::get_hash_index(&install)))
+            .send(Dispatch::Done(HashIndex::get_hash_index(
+                &install.installation,
+            )))
             .await?;
 
         // Update UI
         let stop = Instant::now();
         output
             .send(Message::FinishedJob(
-                install.clone(),
+                install.installation.clone(),
                 result.map_err(|err| err.to_string()),
                 stop - start,
             ))

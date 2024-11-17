@@ -21,14 +21,14 @@ Add `--output text` (gitlab flavoured text), `--output slack` or `--output tui` 
 
 The `tui` full screen text mode has the following keyboard bindings:
 
-* `q`: Request exit when all processes finished. This won't kill processes currently running.
-* `ctrl-c`: Same as above.
-* `l`: List installations.
-* `ESC`: From installations, toggle stop requested. From commands, go to installations.
-* `up`/`down`: select next/previous item.
-* `enter`: From installations, show commands for the selected item.
-* `pg up`/`pg down`: Scroll the details pane up/down.
-* `left`/`right` scroll the details pane left/right.
+- `q`: Request exit when all processes finished. This won't kill processes currently running.
+- `ctrl-c`: Same as above.
+- `l`: List installations.
+- `ESC`: From installations, toggle stop requested. From commands, go to installations.
+- `up`/`down`: select next/previous item.
+- `enter`: From installations, show commands for the selected item.
+- `pg up`/`pg down`: Scroll the details pane up/down.
+- `left`/`right` scroll the details pane left/right.
 
 Run commands such as:
 
@@ -90,7 +90,7 @@ cat example/helm-values/envs/dev/config.yaml
 locked: false
 ```
 
-* Setting `locked` to true disables all releases under the env.
+- Setting `locked` to true disables all releases under the env.
 
 The name of the directory corresponds to the name of the environment. In the above case it will be called `dev`.
 
@@ -103,8 +103,8 @@ context: 1234-dev-cluster
 locked: false
 ```
 
-* `context` is the `--kube-context` parameter passed to helm.
-* Setting `locked` to true disables all releases under the cluster dir.
+- `context` is the `--kube-context` parameter passed to helm.
+- Setting `locked` to true disables all releases under the cluster dir.
 
 The name of the directory corresponds to the name of the cluster. Which can be different from the context value provided. In the above example, the cluster is called `dev-cluster` and uses the parameter `--kube-context 1234-dev-cluster`.
 
@@ -126,12 +126,12 @@ release_chart:
 depends: []
 ```
 
-* Setting `auto` to false disables deploys unless using `--auto=all` parameter.
-* Setting `locked` to false disables all deploys.
-* `namespace` is the kubernetes namespace to use for deploys.
-* `release` is the release name for the helm chart.
-* `depends` is a list of releases that must be installed first. `$namespace/$release` format.
-* `release_chart` is how to find the chart to install (see below).
+- Setting `auto` to false disables deploys unless using `--auto=all` parameter.
+- Setting `locked` to false disables all deploys.
+- `namespace` is the kubernetes namespace to use for deploys.
+- `release` is the release name for the helm chart.
+- `depends` is a list of releases that must be installed first. `$namespace/$release` format.
+- `release_chart` is how to find the chart to install (see below).
 
 Note: the value of the `release` is used as the release name, not the name of the directory.
 
@@ -183,20 +183,19 @@ release_chart:
 
 There are a number of existing solutions of deploying stuff on a kubernetes cluster. The main contenders are:
 
-* [argocd](https://argoproj.github.io/cd/)
-* [spinnaker](https://spinnaker.io/)
-* [harness](https://docs.harness.io/)
+- [argocd](https://argoproj.github.io/cd/)
+- [spinnaker](https://spinnaker.io/)
+- [harness](https://docs.harness.io/)
 
 Unfortunately, these all had limitations:
 
-* argocd, while it supports helm charts, it does not support saving helm values in git.
-* Can overcome this issue by creating git repo of charts containing helm sub-charts, but this is ugly and requires modifying the helm values.
-* spinnaker seems rather heavy weight to install, haven't succeeded yet.
-* harness is mostly proprietary solution.
+- argocd, while it supports helm charts, it does not support saving helm values in git.
+- Can overcome this issue by creating git repo of charts containing helm sub-charts, but this is ugly and requires modifying the helm values.
+- spinnaker seems rather heavy weight to install, haven't succeeded yet.
+- harness is mostly proprietary solution.
 
 As a result a Python program was written as an alternative solution. This is a rewrite of the Python program.
 
 ## Current Limitations
 
-* Should be able to save hash of chart to ensure it is not unexpectedly changed upstream.
-* No idea how well `text` will work with github, only tested with gitlab.
+- No idea how well `text` output will work with github, only tested with gitlab.
