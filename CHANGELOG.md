@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.0.0](https://github.com/electronicarts/helmci/compare/v1.3.3...v2.0.0) (2024-11-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* Add support for chart lock files
+
+### Features
+
+* Add .envrc and slack.sh files ([84000f4](https://github.com/electronicarts/helmci/commit/84000f42b8241805f6b4bcc310b818518afd423c))
+* Add support for chart lock files ([c609fba](https://github.com/electronicarts/helmci/commit/c609fba81eb82c5c6d9fc5e6902cffaa28c5f178))
+
+
+### Bug Fixes
+
+* add checks to ensure requested chart name and version consistant with lock file ([642f81b](https://github.com/electronicarts/helmci/commit/642f81b6523fa8dc0fe1bb27da4995c18817dbc1))
+* replace tui with forked ratatui repo ([225e3f8](https://github.com/electronicarts/helmci/commit/225e3f825a9e73fe0507ba6a7e644cfc85a69d27))
+
 ## [1.3.3](https://github.com/electronicarts/helmci/compare/v1.3.2...v1.3.3) (2024-10-18)
 
 
