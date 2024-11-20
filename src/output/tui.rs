@@ -17,30 +17,29 @@ use crossterm::terminal::disable_raw_mode;
 use crossterm::terminal::EnterAlternateScreen;
 use crossterm::terminal::LeaveAlternateScreen;
 use futures::StreamExt;
+use ratatui::backend::CrosstermBackend;
+use ratatui::layout::Alignment;
+use ratatui::layout::Constraint;
+use ratatui::layout::Direction;
+use ratatui::layout::Layout;
+use ratatui::style::Color;
+use ratatui::style::Modifier;
+use ratatui::style::Style;
+use ratatui::text::Line;
+use ratatui::text::Span;
+use ratatui::widgets::Block;
+use ratatui::widgets::Borders;
+use ratatui::widgets::Paragraph;
+use ratatui::widgets::Row;
+use ratatui::widgets::Table;
+use ratatui::widgets::TableState;
+use ratatui::widgets::Wrap;
+use ratatui::Frame;
+use ratatui::Terminal;
 use tokio::select;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
-use tui::backend::Backend;
-use tui::backend::CrosstermBackend;
-use tui::layout::Alignment;
-use tui::layout::Constraint;
-use tui::layout::Direction;
-use tui::layout::Layout;
-use tui::style::Color;
-use tui::style::Modifier;
-use tui::style::Style;
-use tui::text::Span;
-use tui::text::Spans;
-use tui::widgets::Block;
-use tui::widgets::Borders;
-use tui::widgets::Paragraph;
-use tui::widgets::Row;
-use tui::widgets::Table;
-use tui::widgets::TableState;
-use tui::widgets::Wrap;
-use tui::Frame;
-use tui::Terminal;
 
 use crate::duration::duration_string;
 use crate::helm::HelmResult;
@@ -111,8 +110,8 @@ impl<T> StatefulList<T> {
     }
 }
 
-fn ui<B: Backend>(f: &mut Frame<B>, state: &mut State) {
-    let size = f.size();
+fn ui(f: &mut Frame, state: &mut State) {
+    let size = f.area();
 
     let border_style = match (state.stop_requested, state.finished, state.has_errors) {
         (true, _, _) => Style::default().fg(Color::DarkGray),
@@ -160,7 +159,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, state: &mut State) {
         .direction(Direction::Vertical)
         .margin(1)
         .constraints([Constraint::Percentage(20), Constraint::Percentage(80)].as_ref())
-        .split(f.size());
+        .split(f.area());
 
     let job_or_none = if let Some(id) = state.jobs.state.selected() {
         state.jobs.items.get(id)
@@ -191,10 +190,10 @@ fn ui<B: Backend>(f: &mut Frame<B>, state: &mut State) {
                 .collect();
 
             let title = job_or_none.map_or_else(
-                || Spans::from("Commands"),
+                || Line::from("Commands"),
                 |job| {
-                    let mut spans = Spans::from(Span::styled("Commands: ", Style::default()));
-                    spans.0.extend(job.get_title(state).0);
+                    let mut spans = Line::from(Span::styled("Commands: ", Style::default()));
+                    spans.extend(job.get_title(state));
                     spans
                 },
             );
@@ -229,8 +228,14 @@ fn ui<B: Backend>(f: &mut Frame<B>, state: &mut State) {
     f.render_widget(paragraph, chunks[1]);
 }
 
-fn commands_to_table<'a>(items: Vec<Row<'a>>, title: Spans<'a>, border_style: Style) -> Table<'a> {
-    let list = Table::new(items)
+fn commands_to_table<'a>(items: Vec<Row<'a>>, title: Line<'a>, border_style: Style) -> Table<'a> {
+    let widths = [
+        Constraint::Length(20),
+        Constraint::Length(8),
+        Constraint::Percentage(100),
+    ];
+
+    let list = Table::new(items, &widths)
         .block(
             Block::default()
                 .title(title)
@@ -238,14 +243,9 @@ fn commands_to_table<'a>(items: Vec<Row<'a>>, title: Spans<'a>, border_style: St
                 .border_style(border_style),
         )
         .header(Row::new(vec!["Name", "Duration", "Cmd"]).style(Style::default().fg(Color::Yellow)))
-        .widths(&[
-            Constraint::Length(20),
-            Constraint::Length(8),
-            Constraint::Percentage(100),
-        ])
         .column_spacing(1)
         .style(Style::default().fg(Color::White))
-        .highlight_style(
+        .row_highlight_style(
             Style::default()
                 .add_modifier(Modifier::ITALIC)
                 .fg(Color::Black)
@@ -256,7 +256,14 @@ fn commands_to_table<'a>(items: Vec<Row<'a>>, title: Spans<'a>, border_style: St
 }
 
 fn installations_to_table(items: Vec<Row>, border_style: Style) -> Table {
-    let list = Table::new(items)
+    let widths = [
+        Constraint::Length(60),
+        Constraint::Length(20),
+        Constraint::Length(30),
+        Constraint::Length(8),
+    ];
+
+    let list = Table::new(items, &widths)
         .block(
             Block::default()
                 .title("Jobs")
@@ -267,15 +274,9 @@ fn installations_to_table(items: Vec<Row>, border_style: Style) -> Table {
             Row::new(vec!["Context", "Namespace", "Release", "Duration"])
                 .style(Style::default().fg(Color::Yellow)),
         )
-        .widths(&[
-            Constraint::Length(60),
-            Constraint::Length(20),
-            Constraint::Length(30),
-            Constraint::Length(8),
-        ])
         .column_spacing(1)
         .style(Style::default().fg(Color::White))
-        .highlight_style(
+        .row_highlight_style(
             Style::default()
                 .add_modifier(Modifier::ITALIC)
                 .fg(Color::Black)
@@ -290,32 +291,32 @@ trait HasRows {
 }
 
 trait HasMultilineText {
-    fn get_title(&self, state: &State) -> Spans;
+    fn get_title(&self, state: &State) -> Line;
     // fn get_block_title(&self) -> String;
-    fn get_text<'a>(&'a self, state: &'a State) -> Vec<Spans<'a>>;
+    fn get_text<'a>(&'a self, state: &'a State) -> Vec<Line<'a>>;
 }
 
-fn key_value_space(key: &str, value: String) -> Spans {
+fn key_value_space(key: &str, value: String) -> Line {
     let spans = vec![
         Span::styled(format!("{key}: "), Style::default().fg(Color::Blue)),
         Span::styled(value, Style::default().fg(Color::White)),
     ];
 
-    Spans::from(spans)
+    Line::from(spans)
 }
 
 impl HasMultilineText for Logs {
-    fn get_title(&self, _state: &State) -> Spans {
-        Spans::from(Span::styled("Global Logs", Style::default()))
+    fn get_title(&self, _state: &State) -> Line {
+        Line::from(Span::styled("Global Logs", Style::default()))
     }
 
-    fn get_text(&self, _state: &State) -> Vec<Spans> {
-        let result: Vec<Spans> = self
+    fn get_text(&self, _state: &State) -> Vec<Line> {
+        let result: Vec<Line> = self
             .0
             .iter()
             .map(|entry| {
                 let style = get_log_style(entry.level);
-                Spans::from(vec![
+                Line::from(vec![
                     Span::styled(&entry.name, style),
                     Span::styled(" - ", style),
                     Span::styled(&entry.message, style),
@@ -367,7 +368,7 @@ impl HasRows for Installation {
 }
 
 impl HasMultilineText for Installation {
-    fn get_title(&self, state: &State) -> Spans {
+    fn get_title(&self, state: &State) -> Line {
         let status = state.job_status.get(&self.id);
         let style = match status {
             // Some(JobStatus::Skipped) => Style::default().fg(Color::DarkGray),
@@ -382,10 +383,10 @@ impl HasMultilineText for Installation {
             Some(JobStatus::Finished(_, _)) => Style::default().fg(Color::Red),
             None => Style::default().fg(Color::Blue),
         };
-        Spans::from(Span::styled(self.name.clone(), style))
+        Line::from(Span::styled(self.name.clone(), style))
     }
 
-    fn get_text<'a>(&'a self, state: &'a State) -> Vec<Spans<'a>> {
+    fn get_text<'a>(&'a self, state: &'a State) -> Vec<Line<'a>> {
         let job_status = state.job_status.get(&self.id);
 
         let status = job_status.map_or_else(
@@ -415,14 +416,14 @@ impl HasMultilineText for Installation {
             let list_of_spans = result.get_text(state);
 
             if result.installation.id == self.id {
-                lines.push(Spans::from(""));
-                lines.push(Spans::from(""));
-                lines.push(Spans::from(Span::styled(
+                lines.push(Line::from(""));
+                lines.push(Line::from(""));
+                lines.push(Line::from(Span::styled(
                     format!("----- START COMMAND: {} ----", result.command),
                     Style::default().fg(Color::Yellow),
                 )));
                 lines.extend(list_of_spans);
-                lines.push(Spans::from(Span::styled(
+                lines.push(Line::from(Span::styled(
                     format!("----- END COMMAND: {} ----", result.command),
                     Style::default().fg(Color::Yellow),
                 )));
@@ -457,17 +458,17 @@ impl HasRows for HelmResult {
 }
 
 impl HasMultilineText for HelmResult {
-    fn get_title(&self, _state: &State) -> Spans {
+    fn get_title(&self, _state: &State) -> Line {
         let str = self.command.to_string();
         let span = if self.is_err() {
             Span::styled(str, Style::default().fg(Color::Red))
         } else {
             Span::styled(str, Style::default().fg(Color::Green))
         };
-        Spans::from(span)
+        Line::from(span)
     }
 
-    fn get_text(&self, _state: &State) -> Vec<Spans> {
+    fn get_text(&self, _state: &State) -> Vec<Line> {
         let mut lines = vec![key_value_space("Result", self.result_line())];
         lines.push(key_value_space("Exit Code", self.exit_code().to_string()));
 
@@ -476,12 +477,12 @@ impl HasMultilineText for HelmResult {
         let stdout = self.stdout();
         let stderr = self.stderr();
 
-        lines.push(Spans::from(Span::styled(
+        lines.push(Line::from(Span::styled(
             "stdout:",
             Style::default().fg(Color::Blue),
         )));
         lines.extend(format_lines(stdout, Style::default().fg(Color::White)));
-        lines.push(Spans::from(Span::styled(
+        lines.push(Line::from(Span::styled(
             "stderr:",
             Style::default().fg(Color::Blue),
         )));
@@ -509,10 +510,10 @@ fn get_log_style(level: LogLevel) -> Style {
         LogLevel::Trace => style.fg(Color::DarkGray),
     }
 }
-fn format_lines(str: &str, style: Style) -> Vec<Spans> {
+fn format_lines(str: &str, style: Style) -> Vec<Line> {
     let mut lines = vec![];
     for line in str.lines() {
-        lines.push(Spans::from(vec![
+        lines.push(Line::from(vec![
             Span::styled("---> ", Style::default().fg(Color::DarkGray)),
             Span::styled(line, style),
         ]));
