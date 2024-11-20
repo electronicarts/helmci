@@ -27,6 +27,10 @@ pub enum Error {
     Cache(ChartReference, cache::Error),
     #[error("Repo Not Found {0}")]
     RepoNotFound(Url),
+    #[error("Version mismatch: requested {0} locked {1}")]
+    VersionMismatch(String, String),
+    #[error("Name mismatch: requested {0} locked {1}")]
+    NameMismatch(String, String),
 }
 
 pub async fn download_by_reference(
@@ -79,6 +83,30 @@ pub async fn download_by_meta(
     meta: &Meta,
     chart: &ChartReference,
 ) -> Result<charts::Chart, Error> {
+    match chart {
+        ChartReference::Local { .. } => {}
+        ChartReference::Helm {
+            chart_version,
+            chart_name,
+            ..
+        }
+        | ChartReference::Oci {
+            chart_version,
+            chart_name,
+            ..
+        } => {
+            if *chart_version != meta.version {
+                return Err(Error::VersionMismatch(
+                    chart_version.clone(),
+                    meta.version.clone(),
+                ));
+            }
+            if *chart_name != meta.name {
+                return Err(Error::NameMismatch(chart_name.clone(), meta.name.clone()));
+            }
+        }
+    }
+
     if let Some(chart) = cache
         .get_cache_entry(meta)
         .await
