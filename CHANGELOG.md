@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1](https://github.com/electronicarts/helmci/compare/v2.0.0...v2.0.1) (2024-11-26)
+
+
+### Bug Fixes
+
+* rewrite caching API ([aa0ccce](https://github.com/electronicarts/helmci/commit/aa0ccce7935f8de8cdb9a97a4aa8518e5042fedf))
+
 ## [2.0.0](https://github.com/electronicarts/helmci/compare/v1.3.3...v2.0.0) (2024-11-20)
 
 
