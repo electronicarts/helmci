@@ -2,8 +2,7 @@
   description = "Automatic helm chart deployment to Kubernetes cluster";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
-    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay.url = "github:oxalica/rust-overlay";
     crane.url = "github:ipetkov/crane";
@@ -11,7 +10,6 @@
 
   outputs = {
     nixpkgs,
-    nixpkgs-unstable,
     flake-utils,
     rust-overlay,
     crane,
@@ -22,7 +20,6 @@
         inherit system;
         overlays = [(import rust-overlay)];
       };
-      pkgs_unstable = nixpkgs-unstable.legacyPackages.${system};
 
       osxlibs = pkgs.lib.lists.optionals pkgs.stdenv.isDarwin [
         pkgs.darwin.apple_sdk.frameworks.Security
@@ -74,7 +71,7 @@
       helm = pkgs.wrapHelm pkgs.kubernetes-helm {
         plugins = [
           pkgs.kubernetes-helmPlugins.helm-diff
-          pkgs_unstable.kubernetes-helmPlugins.helm-secrets
+          pkgs.kubernetes-helmPlugins.helm-secrets
         ];
         extraMakeWrapperArgs = "--set HELM_SECRETS_SOPS_PATH ${sops}/bin/sops --set HELM_SECRETS_VALS_PATH ${vals}/bin/vals";
       };
@@ -92,7 +89,7 @@
       workspaceShell = pkgs.mkShell {
         buildInputs =
           [
-            pkgs_unstable.rust-analyzer
+            pkgs.rust-analyzer
             rustSrcPlatform
             helm
             awscli
