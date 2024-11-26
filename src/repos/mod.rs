@@ -9,6 +9,7 @@ pub mod oci;
 
 use std::collections::HashMap;
 
+use charts::Chart;
 use meta::Meta;
 use thiserror::Error;
 use url::Url;
@@ -107,16 +108,21 @@ pub async fn download_by_meta(
         }
     }
 
-    if let Some(chart) = cache
-        .get_cache_entry(meta)
+    let key = meta.get_cache_key();
+    if let Some(path) = cache
+        .get_cache_entry(&key)
         .await
         .map_err(|e| Error::Cache(chart.clone(), e))?
     {
+        let chart = Chart {
+            meta: meta.clone(),
+            file_path: path,
+        };
         return Ok(chart);
     }
 
     match chart {
-        ChartReference::Local { path } => local::get_by_path(path, cache)
+        ChartReference::Local { path } => local::get_by_meta(path, cache, meta)
             .await
             .map_err(|e| Error::Local(path.to_string_lossy().to_string(), e)),
         ChartReference::Helm { repo_url, .. } => {

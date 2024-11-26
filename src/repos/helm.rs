@@ -1,9 +1,11 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 
+use futures::StreamExt;
 use thiserror::Error;
 use url::Url;
 
-use super::cache::{self, Cache};
+use super::cache::{self, Cache, Key};
 use super::hash::Sha256Hash;
 use super::meta::RepoSpecific;
 use super::{charts::Chart, meta::Meta};
@@ -18,18 +20,20 @@ pub enum Error {
     Parse(#[from] serde_yml::Error),
     #[error("Failed to append url: {0}")]
     UrlJoin(#[from] AppendUrlError),
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+    #[error("File error: {0}")]
+    File(PathBuf, std::io::Error),
     #[error("Cache error: {0}")]
     Cache(#[from] cache::Error),
-    #[error("Cache streaming error: {0}")]
-    CacheStream(#[from] cache::StreamError<reqwest::Error>),
     #[error("Chart not found")]
     ChartNotFound,
     #[error("Failed to parse version: {0}")]
     VersionParse(#[from] versions::Error),
     #[error("Chart missing digest")]
     MissingDigest,
+    #[error("Size mismatch {0}: expected {1}, but got {2}")]
+    SizeMismatch(PathBuf, u64, u64),
+    #[error("Reqwest error {0}: {1}")]
+    Reqwest(Url, reqwest::Error),
 }
 
 #[allow(dead_code)]
@@ -48,33 +52,71 @@ struct Entry {
 }
 
 impl Entry {
-    async fn download_chart(&self, cache: &Cache) -> Result<Chart, Error> {
-        let Some(digest) = &self.digest else {
+    async fn download_chart(
+        &self,
+        cache: &Cache,
+        expected_size: Option<u64>,
+    ) -> Result<Chart, Error> {
+        let Some(sha256_hash) = &self.digest else {
             return Err(Error::MissingDigest);
         };
 
-        let chart = Meta {
+        let key = Key {
             name: self.name.clone(),
-            version: self.version.clone(),
-            sha256_hash: digest.clone(),
-            created: Some(self.created),
-            repo: RepoSpecific::Helm,
+            sha256_hash: sha256_hash.clone(),
         };
 
-        if let Some(entry) = cache.get_cache_entry(&chart).await? {
-            return Ok(entry);
+        if let Some(file) = cache.get_cache_entry(&key).await? {
+            self.file_to_chart(file, sha256_hash, expected_size)?;
         }
 
         let url = self.urls.first().ok_or(Error::ChartNotFound)?;
-        let stream = reqwest::get(url.as_str())
-            .await?
-            .error_for_status()?
-            .bytes_stream();
+        let mut file = cache.create_cache_entry(".tgz", expected_size).await?;
 
-        let stream = stream;
-        let cache = cache.create_cache_entry(chart, stream).await?;
+        {
+            let mut stream = reqwest::get(url.as_str())
+                .await?
+                .error_for_status()?
+                .bytes_stream();
+            while let Some(chunk) = stream.next().await {
+                let chunk = chunk.map_err(|e| Error::Reqwest(url.clone(), e))?;
+                file.write_chunk(&chunk).await?;
+            }
+        }
 
-        Ok(cache)
+        let path = file.finalize(&key).await?;
+        self.file_to_chart(path, sha256_hash, expected_size)
+    }
+
+    fn file_to_chart(
+        &self,
+        file_path: PathBuf,
+        sha256_hash: &Sha256Hash,
+        expected_size: Option<u64>,
+    ) -> Result<Chart, Error> {
+        let metadata = file_path
+            .metadata()
+            .map_err(|e| Error::File(file_path.clone(), e))?;
+        let size = metadata.len();
+
+        if let Some(expected_size) = expected_size {
+            if expected_size != size {
+                return Err(Error::SizeMismatch(file_path, expected_size, size));
+            }
+        }
+
+        let meta = Meta {
+            name: self.name.clone(),
+            version: self.version.clone(),
+            sha256_hash: sha256_hash.clone(),
+            created: Some(self.created),
+            repo: RepoSpecific::Helm,
+            size,
+        };
+
+        let chart = Chart { file_path, meta };
+
+        Ok(chart)
     }
 }
 
@@ -117,7 +159,7 @@ impl Repo {
     ) -> Result<Chart, Error> {
         let entry = self._get_by_version(name, version);
         if let Some(entry) = entry {
-            Ok(entry.download_chart(cache).await?)
+            Ok(entry.download_chart(cache, None).await?)
         } else {
             Err(Error::ChartNotFound)
         }
@@ -126,7 +168,7 @@ impl Repo {
     pub async fn get_by_meta(&self, meta: &Meta, cache: &Cache) -> Result<Chart, Error> {
         let entry = self._get_by_sha256(&meta.name, &meta.sha256_hash);
         if let Some(entry) = entry {
-            Ok(entry.download_chart(cache).await?)
+            Ok(entry.download_chart(cache, Some(meta.size)).await?)
         } else {
             Err(Error::ChartNotFound)
         }
@@ -230,7 +272,7 @@ generated: 2016-10-06T16:23:20.499029981-06:00
 
         assert!(ingress.file_path.exists());
 
-        let hash = Sha256Hash::from_file_async(&ingress.file_path)
+        let hash = Sha256Hash::from_async_path(&ingress.file_path)
             .await
             .unwrap();
         assert_eq!(hash, hash);
@@ -256,6 +298,7 @@ generated: 2016-10-06T16:23:20.499029981-06:00
             sha256_hash: expected_hash.clone(),
             created: None,
             repo: RepoSpecific::Helm,
+            size: 58282,
         };
 
         let cache = Cache::new(std::path::Path::new("tmp/helm_download_by_meta"));
@@ -264,7 +307,7 @@ generated: 2016-10-06T16:23:20.499029981-06:00
         assert_eq!(ingress.meta.version, "4.11.3");
         assert_eq!(ingress.meta.sha256_hash, expected_hash);
 
-        let hash = Sha256Hash::from_file_async(&ingress.file_path)
+        let hash = Sha256Hash::from_async_path(&ingress.file_path)
             .await
             .unwrap();
         assert_eq!(hash, hash);

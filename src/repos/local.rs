@@ -1,16 +1,10 @@
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use bytes::BytesMut;
-use flate2::read::GzEncoder;
-use flate2::Compression;
-use futures::stream::TryStreamExt;
-use futures_util::TryFutureExt;
 use serde::Deserialize;
 use thiserror::Error;
-use tokio::pin;
-use tokio_util::codec::{BytesCodec, FramedRead};
 
+use crate::repos::cache::Key;
 use crate::repos::meta::RepoSpecific;
 
 use super::cache::{self, Cache};
@@ -23,14 +17,14 @@ pub enum Error {
     Download(#[from] reqwest::Error),
     #[error("Failed to parse index: {0}")]
     Parse(#[from] serde_yml::Error),
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+    #[error("File error: {0}")]
+    File(PathBuf, std::io::Error),
     #[error("Cache error: {0}")]
     Cache(#[from] cache::Error),
-    #[error("Cache streaming error: {0}")]
-    CacheStream(#[from] cache::StreamError<std::io::Error>),
     #[error("Invalid JSON")]
     InvalidJson(#[from] serde_json::Error),
+    #[error("Size mismatch {0}: expected {1}, but got {2}")]
+    SizeMismatch(PathBuf, u64, u64),
 }
 
 #[allow(dead_code)]
@@ -47,45 +41,102 @@ struct Entry {
 }
 
 impl Entry {
-    async fn download_chart(&self, path: &Path, cache: &Cache) -> Result<Chart, Error> {
-        // FIXME: management of temp file is yuck
-        let tempfile = Path::new("archive.tar.gz");
-        {
-            let tar_gz = File::create(tempfile)?;
-            let enc = GzEncoder::new(tar_gz, Compression::default());
-            let mut tar = tar::Builder::new(enc);
-            tar.append_dir_all(format!("{}-{}", self.name, self.version), path)?;
+    async fn download_chart(
+        &self,
+        path: &Path,
+        cache: &Cache,
+        expected_size: Option<u64>,
+        expected_sha256_hash: Option<Sha256Hash>,
+    ) -> Result<Chart, Error> {
+        if let Some(expected_sha256_hash) = &expected_sha256_hash {
+            let key = Key {
+                name: self.name.clone(),
+                sha256_hash: expected_sha256_hash.clone(),
+            };
+
+            if let Some(file_path) = cache.get_cache_entry(&key).await? {
+                return self.file_to_chart(file_path, expected_sha256_hash, expected_size);
+            }
         }
 
-        let sha256_hash = Sha256Hash::from_file_async(tempfile).await?;
+        let mut temp_file = cache.create_cache_entry(".tar", expected_size).await?;
 
-        let chart = Meta {
-            name: self.name.clone(),
-            version: self.version.clone(),
-            sha256_hash,
-            created: Some(chrono::Utc::now().fixed_offset()),
-            repo: RepoSpecific::Local,
+        {
+            let file = temp_file.mut_file();
+            // Could not get this to flush correctly
+            // let encoder = GzipEncoder::new(file);
+            let mut tar = async_tar::Builder::new(file);
+            tar.append_dir_all(format!("{}-{}", self.name, self.version), path)
+                .await
+                .map_err(|e| Error::File(path.to_path_buf(), e))?;
+            tar.finish()
+                .await
+                .map_err(|e| Error::File(path.to_path_buf(), e))?;
         };
 
-        if let Some(entry) = cache.get_cache_entry(&chart).await? {
-            return Ok(entry);
+        // we must flush the file before calculating the hash
+        temp_file.flush().await?;
+
+        // // If we don't have an expected hash value, just use the real hash
+        let sha256_hash = match expected_sha256_hash {
+            Some(expected) => expected,
+            None => temp_file.calc_sha256_hash().await?,
+        };
+
+        let key = Key {
+            name: self.name.clone(),
+            sha256_hash: sha256_hash.clone(),
+        };
+        let path = temp_file.finalize(&key).await?;
+        self.file_to_chart(path, &sha256_hash, expected_size)
+    }
+
+    fn file_to_chart(
+        &self,
+        file_path: PathBuf,
+        sha256_hash: &Sha256Hash,
+        expected_size: Option<u64>,
+    ) -> Result<Chart, Error> {
+        let metadata = file_path
+            .metadata()
+            .map_err(|e| Error::File(file_path.clone(), e))?;
+        let size = metadata.len();
+
+        if let Some(expected_size) = expected_size {
+            if expected_size != size {
+                return Err(Error::SizeMismatch(file_path, expected_size, size));
+            }
         }
 
-        let stream = tokio::fs::File::open(tempfile)
-            .map_ok(|file| FramedRead::new(file, BytesCodec::new()).map_ok(BytesMut::freeze))
-            .try_flatten_stream();
+        let meta = Meta {
+            name: self.name.clone(),
+            version: self.version.clone(),
+            sha256_hash: sha256_hash.clone(),
+            created: Some(chrono::Utc::now().fixed_offset()),
+            repo: RepoSpecific::Helm,
+            size,
+        };
 
-        pin!(stream);
+        let chart = Chart { file_path, meta };
 
-        let cache = cache.create_cache_entry(chart, stream).await?;
-        Ok(cache)
+        Ok(chart)
     }
 }
 
 pub async fn get_by_path(path: &Path, cache: &Cache) -> Result<Chart, Error> {
     let config_path = path.join("Chart.yaml");
-    let entry: Entry = serde_yml::from_reader(File::open(config_path)?)?;
-    entry.download_chart(path, cache).await
+    let file = File::open(config_path.clone()).map_err(|e| Error::File(config_path, e))?;
+    let entry: Entry = serde_yml::from_reader(file)?;
+    entry.download_chart(path, cache, None, None).await
+}
+
+pub async fn get_by_meta(path: &Path, cache: &Cache, meta: &Meta) -> Result<Chart, Error> {
+    let config_path = path.join("Chart.yaml");
+    let file = File::open(config_path.clone()).map_err(|e| Error::File(config_path, e))?;
+    let entry: Entry = serde_yml::from_reader(file)?;
+    entry
+        .download_chart(path, cache, Some(meta.size), Some(meta.sha256_hash.clone()))
+        .await
 }
 
 #[cfg(test)]
@@ -113,7 +164,40 @@ mod tests {
 
         assert!(ingress.file_path.exists());
 
-        let hash = Sha256Hash::from_file_async(&ingress.file_path)
+        let hash = Sha256Hash::from_async_path(&ingress.file_path)
+            .await
+            .unwrap();
+        assert_eq!(hash, hash);
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_get_by_meta() {
+        let expected_hash =
+            Sha256Hash::new("0a2fa83c8d432594612dde50eadfbd23bb795a0f017815dc8023fb8d9e40d30d");
+
+        let meta = Meta {
+            name: "ingress".to_string(),
+            version: "0.0.1".to_string(),
+            sha256_hash: expected_hash.clone(),
+            created: None,
+            repo: RepoSpecific::Helm,
+            size: 13312,
+        };
+
+        let cache = Cache::new(std::path::Path::new("tmp/local_get_by_meta"));
+        let ingress = get_by_meta(
+            Path::new("/home/brian/tree/ea/cloudcell/helm-charts/charts/ingress"),
+            &cache,
+            &meta,
+        )
+        .await
+        .unwrap();
+        assert_eq!(ingress.meta.name, "ingress");
+        assert_eq!(ingress.meta.version, "0.0.1");
+        assert_eq!(ingress.meta.sha256_hash, expected_hash);
+
+        let hash = Sha256Hash::from_async_path(&ingress.file_path)
             .await
             .unwrap();
         assert_eq!(hash, hash);

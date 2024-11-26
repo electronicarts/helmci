@@ -1,4 +1,7 @@
+use std::path::PathBuf;
+
 use docker_credential::{CredentialRetrievalError, DockerCredential};
+use futures::StreamExt;
 use oci_client::{manifest::OciManifest, secrets::RegistryAuth, Client, Reference};
 use thiserror::Error;
 use url::Url;
@@ -6,25 +9,23 @@ use url::Url;
 use crate::repos::{hash::Sha256Hash, meta::RepoSpecific};
 
 use super::{
-    cache::{self, Cache},
+    cache::{self, Cache, Key},
     charts::Chart,
     meta::Meta,
 };
 
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+    #[error("File error: {0}")]
+    File(PathBuf, std::io::Error),
+    #[error("OCI IO error: {0}")]
+    OciIo(Box<Reference>, std::io::Error),
     #[error("Cache error: {0}")]
     Cache(#[from] cache::Error),
-    #[error("Cache streaming error: {0}")]
-    CacheStream(#[from] cache::StreamError<std::io::Error>),
     #[error("Invalid OCI URL")]
-    InvalidOciUrl,
-    #[error("OCI parse error: {0}")]
-    OciParseClient(#[from] oci_client::ParseError),
+    InvalidOciUrl(Url),
     #[error("OCI error: {0}")]
-    OciDistribution(#[from] oci_client::errors::OciDistributionError),
+    OciDistribution(Box<Reference>, oci_client::errors::OciDistributionError),
     #[error("Not an OCI image")]
     NotAnOciImage,
     #[error("Invalid JSON")]
@@ -35,6 +36,8 @@ pub enum Error {
     CredentialRetrieval(#[from] CredentialRetrievalError),
     #[error("Unsupported docker credentials")]
     UnsupportedDockerCredentials,
+    #[error("Size mismatch {0}: expected {1}, but got {2}")]
+    SizeMismatch(PathBuf, u64, u64),
 }
 
 #[allow(dead_code)]
@@ -46,10 +49,13 @@ pub struct Repo {
 impl Repo {
     pub fn download_index(url: &Url) -> Result<Self, Error> {
         if url.scheme() != "oci" {
-            return Err(Error::InvalidOciUrl);
+            return Err(Error::InvalidOciUrl(url.clone()));
         }
 
-        let host = url.host_str().ok_or(Error::InvalidOciUrl)?.to_string();
+        let host = url
+            .host_str()
+            .ok_or(Error::InvalidOciUrl(url.clone()))?
+            .to_string();
         let path = String::from(url.path());
 
         Ok(Repo { host, path })
@@ -61,12 +67,16 @@ impl Repo {
         cache: &Cache,
         name: &str,
         version: &str,
+        expected_size: Option<u64>,
     ) -> Result<Chart, Error> {
         let auth = build_auth(reference)?;
         let client_config = build_client_config();
         let client = Client::new(client_config);
 
-        let (manifest, manifest_digest) = client.pull_manifest(reference, &auth).await?;
+        let (manifest, manifest_digest) = client
+            .pull_manifest(reference, &auth)
+            .await
+            .map_err(|e| Error::OciDistribution(Box::new(reference.clone()), e))?;
 
         let OciManifest::Image(manifest) = manifest else {
             return Err(Error::NotAnOciImage);
@@ -79,45 +89,55 @@ impl Repo {
         let Some(hash) = layer.digest.strip_prefix("sha256:") else {
             return Err(Error::NotAnOciImage);
         };
+        let sha256_hash = Sha256Hash::new(hash);
 
         let annotations = manifest.annotations;
-
-        // Cam't rely on annotations being present
-        // let Some(name) = annotations.get("org.opencontainers.image.title") else {
-        //     return Err(Error::MissingAnnotation(
-        //         "org.opencontainers.image.title".to_string(),
-        //     ));
-        // };
-
-        // Cam't rely on annotations being present
-        // let Some(version) = annotations.get("org.opencontainers.image.version") else {
-        //     return Err(Error::MissingAnnotation(
-        //         "org.opencontainers.image.version".to_string(),
-        //     ));
-        // };
 
         let created = annotations
             .as_ref()
             .and_then(|a| a.get("org.opencontainers.image.created"))
             .and_then(|date| date.parse().ok());
 
-        let chart = Meta {
+        let key = Key {
             name: name.to_string(),
-            version: version.to_string(),
-            sha256_hash: Sha256Hash::new(hash),
-            created,
-            repo: RepoSpecific::Oci {
-                digest: manifest_digest,
-            },
+            sha256_hash: sha256_hash.clone(),
         };
 
-        if let Some(entry) = cache.get_cache_entry(&chart).await? {
-            return Ok(entry);
+        if let Some(file_path) = cache.get_cache_entry(&key).await? {
+            return file_to_chart(
+                file_path,
+                name,
+                version,
+                created,
+                sha256_hash,
+                expected_size,
+                manifest_digest,
+            );
         }
 
-        let mut stream = client.pull_blob_stream(reference, &layer).await?;
-        let cache = cache.create_cache_entry(chart, &mut stream).await?;
-        Ok(cache)
+        let mut file = cache.create_cache_entry(".tgz", expected_size).await?;
+
+        {
+            let mut stream = client
+                .pull_blob_stream(reference, &layer)
+                .await
+                .map_err(|e| Error::OciDistribution(Box::new(reference.clone()), e))?;
+            while let Some(chunk) = stream.next().await {
+                let chunk = chunk.map_err(|e| Error::OciIo(Box::new(reference.clone()), e))?;
+                file.write_chunk(&chunk).await?;
+            }
+        }
+
+        let path = file.finalize(&key).await?;
+        file_to_chart(
+            path,
+            name,
+            version,
+            created,
+            sha256_hash,
+            expected_size,
+            manifest_digest,
+        )
     }
 
     pub async fn get_by_version(
@@ -129,21 +149,64 @@ impl Repo {
         let path = format!("{}/{}", self.path, name);
         let reference: Reference =
             Reference::with_tag(self.host.clone(), path, version.to_string());
-        self.get_by_reference(&reference, cache, name, version)
+        self.get_by_reference(&reference, cache, name, version, None)
             .await
     }
 
     pub async fn get_by_meta(&self, meta: &Meta, cache: &Cache) -> Result<Chart, Error> {
         let path = format!("{}/{}", self.path, meta.name);
-        let RepoSpecific::Oci { digest } = &meta.repo else {
+        let RepoSpecific::Oci {
+            manifest_digest: digest,
+        } = &meta.repo
+        else {
             return Err(Error::NotAnOciImage);
         };
 
         let reference: Reference =
             Reference::with_digest(self.host.clone(), path, digest.to_string());
-        self.get_by_reference(&reference, cache, &meta.name, &meta.version)
-            .await
+        self.get_by_reference(
+            &reference,
+            cache,
+            &meta.name,
+            &meta.version,
+            Some(meta.size),
+        )
+        .await
     }
+}
+
+fn file_to_chart(
+    file_path: PathBuf,
+    name: &str,
+    version: &str,
+    created: Option<chrono::DateTime<chrono::FixedOffset>>,
+    sha256_hash: Sha256Hash,
+    expected_size: Option<u64>,
+    manifest_digest: String,
+) -> Result<Chart, Error> {
+    let metadata = file_path
+        .metadata()
+        .map_err(|e| Error::File(file_path.clone(), e))?;
+    let size = metadata.len();
+
+    if let Some(expected_size) = expected_size {
+        if expected_size != size {
+            return Err(Error::SizeMismatch(file_path, expected_size, size));
+        }
+    }
+
+    let meta = Meta {
+        name: name.to_string(),
+        version: version.to_string(),
+        sha256_hash,
+        created,
+        repo: RepoSpecific::Oci { manifest_digest },
+        size,
+    };
+
+    let chart = Chart { file_path, meta };
+
+    Ok(chart)
 }
 
 fn build_auth(reference: &Reference) -> Result<RegistryAuth, Error> {
@@ -201,7 +264,7 @@ mod tests {
 
         assert!(karpenter.file_path.exists());
 
-        let hash = Sha256Hash::from_file_async(&karpenter.file_path)
+        let hash = Sha256Hash::from_async_path(&karpenter.file_path)
             .await
             .unwrap();
         assert_eq!(hash, expected_hash);
@@ -221,9 +284,11 @@ mod tests {
             sha256_hash: expected_hash.clone(),
             created: None,
             repo: RepoSpecific::Oci {
-                digest: "sha256:98382d6406a3c85711269112fbb337c056d4debabaefb936db2d10137b58bd1b"
-                    .to_string(),
+                manifest_digest:
+                    "sha256:98382d6406a3c85711269112fbb337c056d4debabaefb936db2d10137b58bd1b"
+                        .to_string(),
             },
+            size: 36211,
         };
 
         let cache = Cache::new(Path::new("tmp/oci_download_by_meta"));
@@ -235,7 +300,7 @@ mod tests {
 
         assert!(karpenter.file_path.exists());
 
-        let hash = Sha256Hash::from_file_async(&karpenter.file_path)
+        let hash = Sha256Hash::from_async_path(&karpenter.file_path)
             .await
             .unwrap();
         assert_eq!(hash, expected_hash);

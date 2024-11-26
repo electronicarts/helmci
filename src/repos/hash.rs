@@ -15,7 +15,7 @@ impl Sha256Hash {
     //     Ok(Self(hash))
     // }
 
-    pub async fn from_file_async(path: &std::path::Path) -> Result<Self, std::io::Error> {
+    pub async fn from_async_path(path: &std::path::Path) -> Result<Self, std::io::Error> {
         let hash = path.async_digest().await?;
         Ok(Self(hash))
     }
