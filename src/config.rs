@@ -76,7 +76,7 @@ impl Serialize for ReleaseReference {
 }
 
 /// A reference to a chart stored in the config file.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 #[serde(tag = "type")]
 pub enum ChartReference {
     #[serde(rename = "helm")]

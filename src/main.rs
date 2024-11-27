@@ -644,7 +644,7 @@ async fn run_jobs_concurrently(
     upgrade_control: &UpgradeControl,
 ) -> Result<()> {
     let downloaded_installations = if request.requires_helm_repos() {
-        info!(output, "Downloading repos").await;
+        info!(output, "Downloading repos for installation").await;
         let repos = get_required_repos(&todo).await?;
 
         let mut downloaded = Vec::with_capacity(todo.len());
@@ -699,7 +699,7 @@ async fn run_jobs_concurrently(
     }
 
     if matches!(*request, Request::RewriteLocks | Request::Update { .. }) {
-        info!(output, "Downloading repos").await;
+        info!(output, "Downloading repos for updating locks").await;
         let repos = get_required_repos(&todo).await?;
 
         for installation in todo {
@@ -712,28 +712,23 @@ async fn run_jobs_concurrently(
                 None
             };
 
-            info!(output, "Downloading chart {}", installation.chart_reference).await;
+            let chart_reference = get_new_chart_reference(&request, &installation)?;
+            if let Some(chart_reference) = chart_reference {
+                info!(output, "Downloading chart {:?}", chart_reference).await;
+                let chart = download_by_reference(&repos, &cache, &chart_reference).await?;
+                let new = Lock::new(chart.meta);
 
-            // Reload the release file because it may have changed
-            // particularly with the `Request::Update`` command
-            let release = serde_yml::from_str::<config::ReleaseConfig>(&std::fs::read_to_string(
-                &installation.config_file,
-            )?)
-            .context("Failed to parse config file")?;
-
-            let chart = download_by_reference(&repos, &cache, &release.release_chart).await?;
-            let new = Lock::new(chart.meta);
-
-            if let Some(old) = old {
-                if old.meta == new.meta {
-                    info!(output, "No change to lock file {}", lock_file.display()).await;
+                if let Some(old) = old {
+                    if old.meta == new.meta {
+                        info!(output, "No change to lock file {}", lock_file.display()).await;
+                    } else {
+                        info!(output, "Updated lock file {}", lock_file.display()).await;
+                        new.save(lock_file)?;
+                    }
                 } else {
-                    info!(output, "Updated lock file {}", lock_file.display()).await;
+                    info!(output, "Created lock file {}", lock_file.display()).await;
                     new.save(lock_file)?;
                 }
-            } else {
-                info!(output, "Created lock file {}", lock_file.display()).await;
-                new.save(lock_file)?;
             }
         }
 
@@ -741,6 +736,32 @@ async fn run_jobs_concurrently(
     }
 
     Ok(())
+}
+
+fn get_new_chart_reference(
+    request: &Request,
+    installation: &Installation,
+) -> Result<Option<ChartReference>, anyhow::Error> {
+    let chart_reference = match request {
+        Request::Update { .. } => {
+            // Reload the release file because it may have changed
+
+            let new_chart_reference = serde_yml::from_str::<config::ReleaseConfig>(
+                &std::fs::read_to_string(&installation.config_file)?,
+            )
+            .context("Failed to parse config file")?
+            .release_chart;
+
+            if installation.chart_reference == new_chart_reference {
+                None
+            } else {
+                Some(new_chart_reference)
+            }
+        }
+        Request::RewriteLocks => Some(installation.chart_reference.clone()),
+        _ => None,
+    };
+    Ok(chart_reference)
 }
 
 async fn run_jobs_concurrently_with_repos(
