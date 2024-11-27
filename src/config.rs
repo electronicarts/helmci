@@ -1,7 +1,6 @@
 // Copyright (C) 2022 Electronic Arts, Inc. All rights reserved.
 
 //! Read config files from helm-values repo.
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -260,19 +259,15 @@ impl Cluster {
     }
 
     /// Load a release given its name and overrides.
-    pub fn load_release(&self, dir_name: &str, overrides: &Overrides) -> Result<Release> {
+    pub fn load_release(&self, dir_name: &str) -> Result<Release> {
         let dir = self.dir.join(dir_name);
         let config_file = dir.join("config.yaml");
         let lock_file = dir.join("lock.json");
 
         let file: String = std::fs::read_to_string(&config_file)
             .with_context(|| format!("Reading file {}", config_file.display()))?;
-        let mut config: ReleaseConfig = serde_yml::from_str(&file)
+        let config: ReleaseConfig = serde_yml::from_str(&file)
             .with_context(|| format!("Parsing file {}", config_file.display()))?;
-
-        if let Some(reference) = overrides.releases.get(&config.release) {
-            config.release_chart = (*reference).clone();
-        }
 
         Ok(Release {
             name: config.release.clone(),
@@ -281,24 +276,6 @@ impl Cluster {
             lock_file,
             config,
         })
-    }
-}
-
-/// Override config file, to override chart versions.
-#[derive(Serialize, Deserialize, Debug, Default)]
-pub struct Overrides {
-    pub releases: HashMap<String, ChartReference>,
-}
-
-impl Overrides {
-    /// Load the overrides config.
-    pub fn load(path: &Path) -> Result<Self> {
-        let file: String = std::fs::read_to_string(path)
-            .with_context(|| format!("Reading file {}", path.display()))?;
-        let config: Overrides = serde_yml::from_str(&file)
-            .with_context(|| format!("Parsing file {}", path.display()))?;
-
-        Ok(config)
     }
 }
 

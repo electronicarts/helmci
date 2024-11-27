@@ -46,7 +46,7 @@ use output::{JobSuccess, Message, MultiOutput, Output, Sender};
 mod config;
 use config::Release;
 use config::{ChartReference, Cluster, Env};
-use config::{Overrides, ValuesFile, ValuesFormat};
+use config::{ValuesFile, ValuesFormat};
 
 mod logging;
 
@@ -200,10 +200,6 @@ struct Args {
     /// The source directory containing the helm-values.
     #[clap(long)]
     vdir: PathBuf,
-
-    /// Provide an override file to use.
-    #[clap(long)]
-    overrides: Option<String>,
 
     /// What method should be use to display output?
     #[clap(long, value_enum)]
@@ -475,14 +471,6 @@ async fn generate_todo(
     let mut seen = InstallationSet::default();
     let mut next_id: InstallationId = 0;
 
-    let overrides = match &args.overrides {
-        Some(path) => {
-            let override_path = PathBuf::from(path);
-            Overrides::load(&override_path)?
-        }
-        None => Overrides::default(),
-    };
-
     for env_name in envs {
         let env =
             Env::load(&vdir, &env_name).with_context(|| format!("Cannot load env {env_name}"))?;
@@ -523,11 +511,9 @@ async fn generate_todo(
                 format!("Cannot list releases from cluster {cluster_name} env {env_name}")
             })?;
             for release_dir_name in &all_releases {
-                let release = cluster
-                    .load_release(release_dir_name, &overrides)
-                    .with_context(|| {
-                        format!("Cannot load releases from cluster {cluster_name} env {env_name}")
-                    })?;
+                let release = cluster.load_release(release_dir_name).with_context(|| {
+                    format!("Cannot load releases from cluster {cluster_name} env {env_name}")
+                })?;
                 trace!(output, "Processing install {}", release.name).await;
 
                 let auto_skip = match args.auto {
