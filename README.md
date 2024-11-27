@@ -137,17 +137,6 @@ Note: the value of the `release` is used as the release name, not the name of th
 
 The `values.yaml` and (optionally) `values.secrets` files contain the helm values. Note `values.secrets` can be encrypted, but if so must be decrypted using whatever mechanism before running helmci.
 
-## Override config
-
-Used to override `release_chart` details for testing purposes. Filename provided by the `--overrides` parameter.
-
-```yaml
-releases:
-  kube-prometheus-stack:
-    type: local
-    path: /home/me/charts/kube-prometheus-stack
-```
-
 ## Helm chart config
 
 Example helm chart specification:
