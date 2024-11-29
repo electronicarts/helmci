@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.0.2](https://github.com/electronicarts/helmci/compare/v2.0.1...v2.0.2) (2024-11-29)
+
+
+### Bug Fixes
+
+* add .gitignore file for example ([d7410d0](https://github.com/electronicarts/helmci/commit/d7410d0397dde582265ee92677ec34cbb3667d87))
+* add lock file to example ([01065a4](https://github.com/electronicarts/helmci/commit/01065a413dae7f4e478b4435b09510167b639515))
+* improve update performance if no changes ([4eea8b3](https://github.com/electronicarts/helmci/commit/4eea8b336fa367ad0ecfbc25f0e1b2059996a01b))
+* Remove override config from docs too ([97a5f4f](https://github.com/electronicarts/helmci/commit/97a5f4f6b6b6a060a3c9418512adb93127acbc26))
+* remove overrides support ([2ca9c03](https://github.com/electronicarts/helmci/commit/2ca9c0384d389753b04c319fafc4ca40bda7cc93))
+* support sops.yaml file by default ([94b63c9](https://github.com/electronicarts/helmci/commit/94b63c95cec130defe7e2d1c6e3ab1cd1954fae3))
+
 ## [2.0.1](https://github.com/electronicarts/helmci/compare/v2.0.0...v2.0.1) (2024-11-26)
 
 
