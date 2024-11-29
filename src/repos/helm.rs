@@ -137,14 +137,14 @@ impl Repo {
         Ok(serde_yml::from_str::<Repo>(&text)?)
     }
 
-    fn _get_by_version(&self, name: &str, version: &str) -> Option<&Entry> {
+    fn internal_get_by_version(&self, name: &str, version: &str) -> Option<&Entry> {
         self.entries
             .get(name)?
             .iter()
             .find(|e| e.version == version)
     }
 
-    fn _get_by_sha256(&self, name: &str, expected_hash: &Sha256Hash) -> Option<&Entry> {
+    fn internal_get_by_sha256(&self, name: &str, expected_hash: &Sha256Hash) -> Option<&Entry> {
         self.entries
             .get(name)?
             .iter()
@@ -157,7 +157,7 @@ impl Repo {
         version: &str,
         cache: &Cache,
     ) -> Result<Chart, Error> {
-        let entry = self._get_by_version(name, version);
+        let entry = self.internal_get_by_version(name, version);
         if let Some(entry) = entry {
             Ok(entry.download_chart(cache, None).await?)
         } else {
@@ -166,7 +166,7 @@ impl Repo {
     }
 
     pub async fn get_by_meta(&self, meta: &Meta, cache: &Cache) -> Result<Chart, Error> {
-        let entry = self._get_by_sha256(&meta.name, &meta.sha256_hash);
+        let entry = self.internal_get_by_sha256(&meta.name, &meta.sha256_hash);
         if let Some(entry) = entry {
             Ok(entry.download_chart(cache, Some(meta.size)).await?)
         } else {
