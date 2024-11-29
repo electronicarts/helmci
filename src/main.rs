@@ -588,6 +588,13 @@ fn create_installation(
             format: ValuesFormat::PlainText,
         });
     }
+    let sops_file = release.dir.join("sops.yaml");
+    if sops_file.is_file() {
+        values_files.push(ValuesFile {
+            path: sops_file,
+            format: ValuesFormat::Sops,
+        });
+    }
 
     for override_values_file in release.config.override_values_files {
         let path = release.dir.join(&override_values_file.path);
