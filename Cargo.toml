@@ -19,7 +19,7 @@ tabled = "0.17.0"
 tokio = { version = "1", features = ["full"] }
 slack-morphism = { version = "2.7.0", features = ["hyper"] }
 chrono = "0.4.39"
-hyper-rustls = "0.27.3"
+hyper-rustls = "0.27.4"
 hyper = "1.5.2"
 async-trait = "0.1.83"
 semver = "1.0.24"
