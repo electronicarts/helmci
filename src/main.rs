@@ -639,7 +639,7 @@ enum Dispatch {
 }
 
 fn is_ok(do_depends: bool, some_i: Option<&Arc<Installation>>, done: &InstallationSet) -> bool {
-    some_i.map_or(false, |i| !do_depends || is_depends_ok(i, done))
+    some_i.is_some_and(|i| !do_depends || is_depends_ok(i, done))
 }
 
 async fn run_jobs_concurrently(
