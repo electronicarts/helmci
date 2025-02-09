@@ -1,6 +1,8 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
+use async_compression::futures::write::GzipEncoder;
+use futures::AsyncWriteExt;
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -63,13 +65,21 @@ impl Entry {
 
         {
             let file = temp_file.mut_file();
-            // Could not get this to flush correctly
-            // let encoder = GzipEncoder::new(file);
-            let mut tar = async_tar::Builder::new(file);
+            let encoder = GzipEncoder::new(file);
+            let mut tar = async_tar::Builder::new(encoder);
             tar.append_dir_all(format!("{}-{}", self.name, self.version), path)
                 .await
                 .map_err(|e| Error::File(path.to_path_buf(), e))?;
             tar.finish()
+                .await
+                .map_err(|e| Error::File(path.to_path_buf(), e))?;
+
+            let mut encoder = tar
+                .into_inner()
+                .await
+                .map_err(|e| Error::File(path.to_path_buf(), e))?;
+            encoder
+                .close()
                 .await
                 .map_err(|e| Error::File(path.to_path_buf(), e))?;
         };
