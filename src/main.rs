@@ -920,18 +920,18 @@ async fn worker_thread(
         // Execute the job
         let result = run_job(command, &install, output, upgrade_control).await;
         match &result {
-            Ok(_) => {}
+            Ok(_) => {
+                tx_dispatch
+                    .send(Dispatch::Done(HashIndex::get_hash_index(
+                        &install.installation,
+                    )))
+                    .await?;
+            }
             Err(err) => {
                 error!(output, "job failed: {err}").await;
                 errors = true;
             }
         }
-
-        tx_dispatch
-            .send(Dispatch::Done(HashIndex::get_hash_index(
-                &install.installation,
-            )))
-            .await?;
 
         // Update UI
         let stop = Instant::now();
