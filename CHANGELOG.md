@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.3](https://github.com/electronicarts/helmci/compare/v2.0.2...v2.0.3) (2025-02-19)
+
+
+### Bug Fixes
+
+* don't process job if dependancies fail ([e6f346a](https://github.com/electronicarts/helmci/commit/e6f346a33dfb0e2303ba5901caeada8cae50a1bf))
+* local repos correctly create .tgz files ([46b39eb](https://github.com/electronicarts/helmci/commit/46b39eb2436750c1b53855e0852bbdfd18e7629d))
+* update nix flake inputs ([73c0c7f](https://github.com/electronicarts/helmci/commit/73c0c7f70dd72969c6095ba3bdd1031e1adfb0a8))
+
 ## [2.0.2](https://github.com/electronicarts/helmci/compare/v2.0.1...v2.0.2) (2024-11-29)
 
 
