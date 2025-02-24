@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use docker_credential::{CredentialRetrievalError, DockerCredential};
 use futures::StreamExt;
-use oci_client::{manifest::OciManifest, secrets::RegistryAuth, Client, Reference};
+use oci_client::{Client, Reference, manifest::OciManifest, secrets::RegistryAuth};
 use thiserror::Error;
 use url::Url;
 

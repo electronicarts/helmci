@@ -9,7 +9,7 @@ use super::cache::{self, Cache, Key};
 use super::hash::Sha256Hash;
 use super::meta::RepoSpecific;
 use super::{charts::Chart, meta::Meta};
-use crate::urls::{append_url, AppendUrlError};
+use crate::urls::{AppendUrlError, append_url};
 use crate::versions;
 
 #[derive(Error, Debug)]

@@ -16,14 +16,14 @@ use std::str::{self, FromStr};
 use std::sync::Arc;
 
 use anyhow::Result;
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 
 use clap::Parser;
 use clap::Subcommand;
 
 use repos::cache::Cache;
 use repos::locks::Lock;
-use repos::{download_by_reference, Repos};
+use repos::{Repos, download_by_reference};
 use tap::Pipe;
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
@@ -37,11 +37,11 @@ use helm::InstallationId;
 use helm::{DiffResult, DownloadedInstallation};
 
 mod depends;
-use depends::{is_depends_ok, HashIndex, InstallationSet};
+use depends::{HashIndex, InstallationSet, is_depends_ok};
 
 mod output;
-use output::{error, info, trace, warning};
 use output::{JobSuccess, Message, MultiOutput, Output, Sender};
+use output::{error, info, trace, warning};
 
 mod config;
 use config::Release;

@@ -213,7 +213,7 @@ impl CommandLine {
                     exit_code,
                     duration,
                     kind: err,
-                })
+                });
             }
         };
 

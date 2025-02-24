@@ -18,11 +18,11 @@ use tap::Pipe;
 use url::Url;
 
 use crate::{
+    Update,
     command::{CommandLine, CommandResult, CommandSuccess},
     config::{AnnouncePolicy, ChartReference, ReleaseReference, ValuesFile, ValuesFormat},
-    output::{debug, error, info, Message, MultiOutput},
+    output::{Message, MultiOutput, debug, error, info},
     repos::{charts::Chart, helm},
-    Update,
 };
 
 // /// A reference to a Helm Repo.

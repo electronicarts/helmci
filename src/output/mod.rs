@@ -10,9 +10,9 @@ use std::{sync::Arc, time::Duration};
 use tokio::{sync::mpsc, time::Instant};
 
 use crate::{
+    Request,
     helm::{HelmResult, Installation},
     logging::LogEntry,
-    Request,
 };
 
 pub mod slack;
