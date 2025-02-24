@@ -75,7 +75,7 @@ impl MultiOutput {
 }
 
 macro_rules! trace {
-    ($tx:expr, $($t:tt)*) => {
+    ($tx:expr_2021, $($t:tt)*) => {
         $tx.send_log($crate::logging::log!(
             $crate::logging::LogLevel::Trace,
             format!($($t)*)
@@ -85,7 +85,7 @@ macro_rules! trace {
 pub(crate) use trace;
 
 macro_rules! debug {
-    ($tx:expr, $($t:tt)*) => {
+    ($tx:expr_2021, $($t:tt)*) => {
         $tx.send_log($crate::logging::log!(
             $crate::logging::LogLevel::Debug,
             format!($($t)*)
@@ -95,7 +95,7 @@ macro_rules! debug {
 pub(crate) use debug;
 
 macro_rules! info {
-    ($tx:expr, $($t:tt)*) => {
+    ($tx:expr_2021, $($t:tt)*) => {
         $tx.send_log($crate::logging::log!(
             $crate::logging::LogLevel::Info,
             format!($($t)*)
@@ -105,7 +105,7 @@ macro_rules! info {
 pub(crate) use info;
 
 macro_rules! warning {
-    ($tx:expr, $($t:tt)*) => {
+    ($tx:expr_2021, $($t:tt)*) => {
         $tx.send_log($crate::logging::log!(
             $crate::logging::LogLevel::Warning,
             format!($($t)*)
@@ -115,7 +115,7 @@ macro_rules! warning {
 pub(crate) use warning;
 
 macro_rules! error {
-    ($tx:expr, $($t:tt)*) => {
+    ($tx:expr_2021, $($t:tt)*) => {
         $tx.send_log($crate::logging::log!(
             $crate::logging::LogLevel::Error,
             format!($($t)*)

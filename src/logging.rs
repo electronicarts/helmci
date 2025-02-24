@@ -34,7 +34,7 @@ pub struct LogEntry {
 }
 
 macro_rules! log {
-    ($level:expr, $message:expr) => {
+    ($level:expr_2021, $message:expr_2021) => {
         $crate::logging::raw_log($level, format!("{}:{}", file!(), line!()), $message)
     };
 }

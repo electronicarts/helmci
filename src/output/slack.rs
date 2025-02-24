@@ -604,13 +604,13 @@ pub fn start() -> Result<(SlackOutput, Sender)> {
                 },
 
                 msg = rx.recv() => {
-                    if let Some(msg) = msg {
+                    match msg { Some(msg) => {
                         process_message(&msg, &mut state, &slack_state).await;
-                    } else {
+                    } _ => {
                         // Note interval.tick() will go for ever, so this is the main exit point.
                         // Will happen when sender closes rx pipe.
                         break;
-                    };
+                    }};
                 },
 
                 else => {
