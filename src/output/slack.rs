@@ -230,7 +230,7 @@ where
                 if count >= MAX_TRIES {
                     println!("Too many retries posting to slack: {rle}");
                     break None;
-                };
+                }
             }
             Err(err) => {
                 println!("Slack error posting: {err}");
@@ -359,7 +359,7 @@ impl SlackState {
                     Some(Request::Template { .. }) => "templated with",
                     Some(Request::Outdated { .. }) => "version checked with",
                     Some(Request::Update { .. }) => "updated values",
-                    Some(Request::RewriteLocks {}) => "rewrote locks",
+                    Some(Request::RewriteLocks) => "rewrote locks",
                     None => "processed",
                 };
                 let cluster = installation.cluster_name.clone();
@@ -490,7 +490,7 @@ fn slack_title(state: &State) -> String {
         Some(Request::Template { .. }) => "template",
         Some(Request::Outdated { .. }) => "outdated",
         Some(Request::Update { .. }) => "update",
-        Some(Request::RewriteLocks {}) => "rewrite locks",
+        Some(Request::RewriteLocks) => "rewrite locks",
         None => "unknown",
     };
     format!("helmci - {task}")
@@ -610,7 +610,7 @@ pub fn start() -> Result<(SlackOutput, Sender)> {
                         // Note interval.tick() will go for ever, so this is the main exit point.
                         // Will happen when sender closes rx pipe.
                         break;
-                    }};
+                    }}
                 },
 
                 else => {

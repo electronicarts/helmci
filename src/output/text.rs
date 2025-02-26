@@ -183,7 +183,7 @@ fn update_results(state: &State, finished: bool) {
             let versions = versions_to_string(state);
             println!("\n\n{versions}");
         }
-    };
+    }
 }
 
 struct GitlabSection {
@@ -299,7 +299,7 @@ impl JobStatus {
         #![allow(clippy::match_same_arms)]
         match self {
             JobStatus::Pending => None,
-            JobStatus::InProgress { .. } => None,
+            JobStatus::InProgress => None,
             JobStatus::Complete { duration } => Some(*duration),
             JobStatus::Skipped { duration } => Some(*duration),
             JobStatus::Failed { duration } => Some(*duration),
@@ -309,7 +309,7 @@ impl JobStatus {
     const fn status(&self) -> Status {
         match self {
             JobStatus::Pending => Status::Pending,
-            JobStatus::InProgress { .. } => Status::InProgress,
+            JobStatus::InProgress => Status::InProgress,
             JobStatus::Complete { .. } => Status::Complete,
             JobStatus::Skipped { .. } => Status::Skipped,
             JobStatus::Failed { .. } => Status::Failed,

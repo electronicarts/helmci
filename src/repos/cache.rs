@@ -97,7 +97,7 @@ impl CreateCacheEntry {
     //     &self.file
     // }
 
-    pub(super) fn mut_file(&mut self) -> &mut File {
+    pub(super) const fn mut_file(&mut self) -> &mut File {
         &mut self.file
     }
 

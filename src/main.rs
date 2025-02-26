@@ -156,7 +156,7 @@ async fn run_job(
             helm::update(installation, tx, updates).await?;
             Ok(JobSuccess::Completed)
         }
-        Request::RewriteLocks { .. } => {
+        Request::RewriteLocks => {
             // This requires access to cache directory
             // which cannot be done concurrently so
             // this not done here.

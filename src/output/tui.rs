@@ -127,7 +127,7 @@ fn ui(f: &mut Frame, state: &mut State) {
         Some(Request::Template { .. }) => "template",
         Some(Request::Outdated { .. }) => "outdated",
         Some(Request::Update { .. }) => "update",
-        Some(Request::RewriteLocks {}) => "rewrite-locks",
+        Some(Request::RewriteLocks) => "rewrite-locks",
         None => "unknown",
     };
 
@@ -737,7 +737,7 @@ fn process_message(msg: &Arc<Message>, state: &mut State) {
         Message::FinishedAll(result, duration) => {
             if result.is_err() {
                 state.has_errors = true;
-            };
+            }
             let str = format!("Finished Everything {}", duration_string(duration));
             state.logs.add_log(log!(LogLevel::Info, &str));
             state.finished = true;

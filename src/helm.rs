@@ -25,29 +25,6 @@ use crate::{
     repos::{charts::Chart, helm},
 };
 
-// /// A reference to a Helm Repo.
-// #[derive(Clone, Debug)]
-// pub struct HelmRepo {
-//     pub name: String,
-//     pub url: String,
-// }
-
-// /// A reference to a helm chart.
-// #[derive(Debug)]
-// pub enum HelmChart<'a> {
-//     Dir(PathBuf),
-//     HelmRepo {
-//         repo: &'a HelmRepo,
-//         chart_name: String,
-//         chart_version: String,
-//     },
-//     OciRepo {
-//         repo_url: String,
-//         chart_name: String,
-//         chart_version: String,
-//     },
-// }
-
 fn helm_path() -> OsString {
     std::env::var_os("HELM_PATH").unwrap_or_else(|| "helm".into())
 }
@@ -157,6 +134,7 @@ impl HelmResult {
         }
     }
 
+    #[allow(clippy::missing_const_for_fn)]
     pub fn stdout(&self) -> &str {
         match &self.result {
             Ok(success) => &success.stdout,
@@ -164,6 +142,7 @@ impl HelmResult {
         }
     }
 
+    #[allow(clippy::missing_const_for_fn)]
     pub fn stderr(&self) -> &str {
         match &self.result {
             Ok(success) => &success.stderr,
@@ -185,64 +164,6 @@ impl HelmResult {
         }
     }
 }
-
-// /// Request to add a repo to helm.
-// pub async fn add_repo(
-//     HelmRepo {
-//         name: repo_name,
-//         url: repo_url,
-//     }: &HelmRepo,
-//     output: &MultiOutput,
-// ) -> Result<()> {
-//     debug!(output, "Add helm repo {} at {}... ", repo_name, repo_url).await;
-
-//     let command: CommandLine = CommandLine::new(
-//         "helm".into(),
-//         vec![
-//             "repo".into(),
-//             "add".into(),
-//             "--force-update".into(),
-//             repo_name.into(),
-//             repo_url.into(),
-//         ],
-//     );
-
-//     let result = command.run().await;
-//     if let Err(err) = result {
-//         error!(output, "error installing helm repo").await;
-//         error!(output, "{}", err).await;
-//         anyhow::bail!("helm repo add failed");
-//     }
-
-//     debug!(output, "done adding helm repo.").await;
-//     Ok(())
-// }
-
-// /// Request to remote a repo from helm.
-// pub async fn remove_repo(
-//     HelmRepo {
-//         name: repo_name,
-//         url: repo_url,
-//     }: &HelmRepo,
-//     output: &MultiOutput,
-// ) -> Result<()> {
-//     debug!(output, "Remove helm repo {} at {}... ", repo_name, repo_url).await;
-
-//     let command: CommandLine = CommandLine::new(
-//         "helm".into(),
-//         vec!["repo".into(), "remove".into(), repo_name.into()],
-//     );
-
-//     let result = command.run().await;
-//     if let Err(err) = result {
-//         error!(output, "error removing helm repo").await;
-//         error!(output, "{}", err).await;
-//         anyhow::bail!("helm repo remove failed");
-//     }
-
-//     debug!(output, "done removing helm repo.").await;
-//     Ok(())
-// }
 
 /// Run the lint command.
 pub async fn lint(downloaded: &DownloadedInstallation, tx: &MultiOutput) -> Result<()> {
@@ -383,6 +304,7 @@ pub async fn diff(downloaded: &DownloadedInstallation, tx: &MultiOutput) -> Resu
         installation.namespace.clone().into(),
         "--kube-context".into(),
         installation.clone().context.clone().into(),
+        "--show-secrets".into(),
     ];
 
     // Append additional arguments from the installation configuration.
