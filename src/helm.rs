@@ -168,31 +168,32 @@ impl HelmResult {
 /// Run the lint command.
 pub async fn lint(downloaded: &DownloadedInstallation, tx: &MultiOutput) -> Result<()> {
     let installation = &downloaded.installation;
-    if let ChartReference::Local { path } = &installation.chart_reference {
-        let mut args = vec![
-            "lint".into(),
-            "--namespace".into(),
-            installation.namespace.clone().into(),
-            "--kube-context".into(),
-            installation.context.clone().into(),
-        ];
+    let Some(chart) = &downloaded.chart else {
+        return Err(anyhow::anyhow!("chart not downloaded"));
+    };
+    let (chart, mut chart_args) = get_args_from_chart(chart);
+    let mut args = vec![
+        "lint".into(),
+        chart,
+        "--namespace".into(),
+        installation.namespace.clone().into(),
+        "--kube-context".into(),
+        installation.context.clone().into(),
+    ];
 
-        args.append(&mut add_values_files(installation));
-        args.push(path.clone().into_os_string());
-        args.append(&mut get_template_parameters(installation));
+    args.append(&mut add_values_files(installation));
+    args.append(&mut chart_args);
+    args.append(&mut get_template_parameters(installation));
 
-        let command_line = CommandLine::new(helm_path(), args);
-        let result = command_line.run().await;
-        let has_errors = result.is_err();
-        let i_result = HelmResult::from_result(installation, result, Command::Lint);
-        let i_result = Arc::new(i_result);
-        tx.send(Message::InstallationResult(i_result)).await;
+    let command_line = CommandLine::new(helm_path(), args);
+    let result = command_line.run().await;
+    let has_errors = result.is_err();
+    let i_result = HelmResult::from_result(installation, result, Command::Lint);
+    let i_result = Arc::new(i_result);
+    tx.send(Message::InstallationResult(i_result)).await;
 
-        if has_errors {
-            Err(anyhow::anyhow!("lint operation failed"))
-        } else {
-            Ok(())
-        }
+    if has_errors {
+        Err(anyhow::anyhow!("lint operation failed"))
     } else {
         Ok(())
     }
