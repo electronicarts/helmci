@@ -9,8 +9,6 @@
 #![allow(clippy::module_name_repetitions)]
 #![allow(clippy::use_self)]
 
-extern crate lazy_static;
-
 use std::path::PathBuf;
 use std::str::{self, FromStr};
 use std::sync::Arc;
