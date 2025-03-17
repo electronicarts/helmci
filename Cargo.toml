@@ -21,7 +21,7 @@ slack-morphism = { version = "2.10.0", features = ["hyper"] }
 chrono = "0.4.40"
 hyper-rustls = "0.27.5"
 hyper = "1.6.0"
-async-trait = "0.1.87"
+async-trait = "0.1.88"
 semver = "1.0.26"
 url = "2.5.4"
 futures = "0.3.31"
