@@ -585,7 +585,8 @@ struct AwsToken {
 #[allow(dead_code)]
 #[derive(Deserialize, Debug)]
 struct AwsTags {
-    name: String,
+    name: Option<String>,
+    #[serde(default)]
     tags: Vec<String>,
 }
 
@@ -640,7 +641,7 @@ impl ParsedOci {
         &self,
         installation: &Arc<Installation>,
         tx: &MultiOutput,
-    ) -> Result<Version> {
+    ) -> Result<Option<Version>> {
         match self {
             ParsedOci::Private {
                 account,
@@ -666,7 +667,10 @@ impl ParsedOci {
                         let details: OciDetails = serde_json::from_str(stdout)?;
                         get_latest_version_from_details(details, tx)
                             .await
-                            .map_or_else(|| Err(anyhow::anyhow!("no versions found")), Ok)
+                            .map_or_else(
+                                || Err(anyhow::anyhow!("no versions found")),
+                                |v| Ok(Some(v)),
+                            )
                     }
                     Err(err) => Err(anyhow::anyhow!("The describe-images command failed: {err}")),
                 };
@@ -691,9 +695,7 @@ impl ParsedOci {
                     .json()
                     .await?;
 
-                get_latest_version_from_tags(path, tags, tx)
-                    .await
-                    .map_or_else(|| Err(anyhow::anyhow!("no versions found")), Ok)
+                get_latest_version_from_tags(path, tags, tx).await.pipe(Ok)
             }
         }
     }
@@ -719,7 +721,9 @@ async fn outdated_oci_chart(
     let latest_version = parsed
         .get_latest_version(installation, tx)
         .await
-        .map_err(|err| anyhow::anyhow!("Get latest version failed {err:?}"))?;
+        .map_err(|err| anyhow::anyhow!("Get latest version failed {err:?}"))?
+        // if we can't get version information, just assume installed version is latest.
+        .unwrap_or_else(|| chart_version.clone());
     tx.send(Message::InstallationVersion(
         installation.clone(),
         chart_version,
