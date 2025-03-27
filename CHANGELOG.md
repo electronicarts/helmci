@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.4](https://github.com/electronicarts/helmci/compare/v2.0.3...v2.0.4) (2025-03-27)
+
+
+### Bug Fixes
+
+* don't fail outdated if AWS doesn't return version info ([516741b](https://github.com/electronicarts/helmci/commit/516741b8c28d98c60391e6dac9bef6f9853509a7))
+
 ## [2.0.3](https://github.com/electronicarts/helmci/compare/v2.0.2...v2.0.3) (2025-02-19)
 
 
