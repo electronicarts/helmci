@@ -25,7 +25,7 @@ async-trait = "0.1.88"
 semver = "1.0.26"
 url = "2.5.4"
 futures = "0.3.31"
-hyper-util = "0.1.10"
+hyper-util = "0.1.11"
 tap = "1.0.1"
 reqwest = { version = "=0.12.15", default-features = false, features = ["json", "rustls-tls"] }
 nondestructive = "0.0.26"
