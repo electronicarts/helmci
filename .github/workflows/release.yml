@@ -2,7 +2,7 @@ name: Rust
 
 on:
   push:
-    branches: ["main"]
+    branches: ["push-zqqrrwxlywol"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -11,24 +11,24 @@ env:
   MACOSX_DEPLOYMENT_TARGET: 10.7
 
 jobs:
-  release_please:
-    name: Release Please
-    runs-on: ubuntu-latest
-    if: github.repository == 'electronicarts/helmci'
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-    steps:
-      - uses: google-github-actions/release-please-action@v4
-        id: release
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          release-type: rust
+  # release_please:
+  #   name: Release Please
+  #   runs-on: ubuntu-latest
+  #   if: github.repository == 'electronicarts/helmci'
+  #   outputs:
+  #     release_created: ${{ steps.release.outputs.release_created }}
+  #     tag_name: ${{ steps.release.outputs.tag_name }}
+  #   steps:
+  #     - uses: google-github-actions/release-please-action@v4
+  #       id: release
+  #       with:
+  #         token: ${{ secrets.GITHUB_TOKEN }}
+  #         release-type: rust
 
   github_build:
     name: Build release binaries
-    needs: release_please
-    if: ${{ needs.release_please.outputs.release_created == 'true' }}
+    # needs: release_please
+    # if: ${{ needs.release_please.outputs.release_created == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -105,6 +105,14 @@ jobs:
           # cargo-wix does not require static crt
           RUSTFLAGS: ""
 
+      - name: Setup | Install bindgen
+        continue-on-error: true
+        # See https://aws.github.io/aws-lc-rs/platform_support.html
+        run: cargo install --force --locked bindgen-cli
+        env:
+          # bindgen does not require static crt
+          RUSTFLAGS: ""
+
       - name: Build | Build
         uses: actions-rs/cargo@v1.0.3
         with:
@@ -146,24 +154,24 @@ jobs:
           name: helmci-${{ matrix.target }}.msi
           path: target/wix/helmci-${{ matrix.target }}.msi
 
-  upload_artifacts:
-    name: Add Build Artifacts to Release
-    needs: [release_please, github_build]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Setup | Artifacts
-        uses: actions/download-artifact@v4
+  # upload_artifacts:
+  #   name: Add Build Artifacts to Release
+  #   needs: [release_please, github_build]
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Setup | Artifacts
+  #       uses: actions/download-artifact@v4
 
-      - name: Setup | Checksums
-        run: for file in helmci-*/helmci-*; do openssl dgst -sha256 -r "$file" | awk '{print $1}' > "${file}.sha256"; done
+  #     - name: Setup | Checksums
+  #       run: for file in helmci-*/helmci-*; do openssl dgst -sha256 -r "$file" | awk '{print $1}' > "${file}.sha256"; done
 
-      - name: Setup | Publish Release
-        run: gh release edit ${{ needs.release_please.outputs.tag_name }} --draft=false --repo=electronicarts/helmci
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #     - name: Setup | Publish Release
+  #       run: gh release edit ${{ needs.release_please.outputs.tag_name }} --draft=false --repo=electronicarts/helmci
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build | Add Artifacts to Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: helmci-*/helmci-*
-          tag_name: ${{ needs.release_please.outputs.tag_name }}
+  #     - name: Build | Add Artifacts to Release
+  #       uses: softprops/action-gh-release@v2
+  #       with:
+  #         files: helmci-*/helmci-*
+  #         tag_name: ${{ needs.release_please.outputs.tag_name }}
