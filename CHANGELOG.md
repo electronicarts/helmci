@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.5](https://github.com/electronicarts/helmci/compare/v2.0.4...v2.0.5) (2025-04-10)
+
+
+### Bug Fixes
+
+* update nix flake inputs ([16ac75c](https://github.com/electronicarts/helmci/commit/16ac75c1185761ba239a51a231df9b35339954d6))
+
 ## [2.0.4](https://github.com/electronicarts/helmci/compare/v2.0.3...v2.0.4) (2025-03-27)
 
 
