@@ -23,7 +23,7 @@ use repos::cache::Cache;
 use repos::locks::Lock;
 use repos::{Repos, download_by_reference};
 use tap::Pipe;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
@@ -632,8 +632,8 @@ const NUM_THREADS: usize = 6;
 
 #[derive(Debug)]
 enum Dispatch {
-    RequestNextJob(oneshot::Sender<Option<Arc<DownloadedInstallation>>>),
     Done(HashIndex),
+    Errored(HashIndex),
 }
 
 fn is_ok(do_depends: bool, some_i: Option<&Arc<Installation>>, done: &InstallationSet) -> bool {
@@ -785,20 +785,30 @@ async fn run_jobs_concurrently_with_repos(
     }
 
     // This process receives requests for jobs and dispatches them
+    let (tx_job, rx_job) = async_channel::unbounded();
     let (tx_dispatch, rx_dispatch) = mpsc::channel(10);
     let output_clone = output.clone();
     let dispatch = tokio::spawn(async move {
-        dispatch_thread(todo, skipped, rx_dispatch, do_depends, &output_clone).await
+        dispatch_thread(
+            todo,
+            skipped,
+            tx_job,
+            rx_dispatch,
+            do_depends,
+            &output_clone,
+        )
+        .await
     });
 
     // The actual worker threads
     let threads: Vec<JoinHandle<Result<()>>> = (0..NUM_THREADS)
         .map(|_| {
+            let rx_job = rx_job.clone();
             let tx_dispatch = tx_dispatch.clone();
             let output = output.clone();
             let request = request.clone();
             tokio::spawn(async move {
-                worker_thread(&request, &tx_dispatch, &output, &upgrade_control).await
+                worker_thread(&request, &rx_job, &tx_dispatch, &output, &upgrade_control).await
             })
         })
         .collect();
@@ -851,38 +861,58 @@ async fn run_jobs_concurrently_with_repos(
 async fn dispatch_thread(
     todo: Vec<Arc<DownloadedInstallation>>,
     skipped: InstallationSet,
+    tx_job: async_channel::Sender<Arc<DownloadedInstallation>>,
     mut rx_dispatch: mpsc::Receiver<Dispatch>,
     do_depends: bool,
     output: &MultiOutput,
 ) -> Result<(), anyhow::Error> {
     let mut installations: Vec<Option<&Arc<DownloadedInstallation>>> =
         todo.iter().map(Some).collect();
+    let mut waiting = InstallationSet::new();
     let mut done = skipped;
-    while let Some(msg) = rx_dispatch.recv().await {
-        match msg {
-            Dispatch::RequestNextJob(tx) => {
-                // Search for first available installation that meets dependancies.
-                let some_i = installations
-                    .iter_mut()
-                    .find(|i| is_ok(do_depends, i.map(|i| &i.installation), &done))
-                    .and_then(std::option::Option::take)
-                    .map(std::borrow::ToOwned::to_owned);
+    loop {
+        // Get pending installations
+        let pending = installations
+            .iter_mut()
+            .filter(|i| is_ok(do_depends, i.map(|i| &i.installation), &done))
+            .filter_map(Option::take)
+            .map(std::borrow::ToOwned::to_owned);
 
-                // Send it back to requestor
-                tx.send(some_i)
-                    .map_err(|_err| anyhow!("Dispatch: Cannot send response"))?;
-            }
-            Dispatch::Done(hash) => {
-                done.add_hash(hash);
+        // Dispatch pending installations
+        for p in pending {
+            info!(output, "dispatching {}", p.installation.name).await;
+            waiting.add(&p.installation);
+            if let Err(_err) = tx_job.send(p).await {
+                break;
             }
         }
+
+        // Exit if there are no running jobs
+        if waiting.is_empty() {
+            break;
+        }
+
+        // Wait for installations
+        match rx_dispatch.recv().await {
+            Some(Dispatch::Done(hash)) => {
+                waiting.remove_hash(&hash);
+                done.add_hash(hash);
+            }
+            Some(Dispatch::Errored(hash)) => {
+                waiting.remove_hash(&hash);
+            }
+            None => break,
+        }
     }
-    let remaining: Vec<_> = installations.iter().filter(|i| i.is_some()).collect();
-    if remaining.is_empty() {
+    tx_job.close();
+    let remaining: Vec<_> = installations.iter().flatten().collect();
+    if !waiting.is_empty() {
+        error!(output, "Exited but still waiting on jobs").await;
+        Err(anyhow::anyhow!("Still waiting on jobs"))
+    } else if remaining.is_empty() {
         Ok(())
     } else {
-        let pending = remaining.iter().filter_map(|i| **i);
-        for i in pending {
+        for i in remaining {
             error!(output, "Still pending {:?}", i.installation.name).await;
         }
         Err(anyhow::anyhow!(
@@ -893,6 +923,7 @@ async fn dispatch_thread(
 
 async fn worker_thread(
     command: &Request,
+    rx_job: &async_channel::Receiver<Arc<DownloadedInstallation>>,
     tx_dispatch: &mpsc::Sender<Dispatch>,
     output: &MultiOutput,
     upgrade_control: &UpgradeControl,
@@ -900,14 +931,10 @@ async fn worker_thread(
     let mut errors = false;
 
     loop {
-        // Get the next available job
-        let (tx_response, rx_response) = oneshot::channel();
-        tx_dispatch
-            .send(Dispatch::RequestNextJob(tx_response))
-            .await?;
-        let some_i = rx_response.await?;
-
-        let Some(install) = some_i else { break };
+        let install = match rx_job.recv().await {
+            Ok(install) => install,
+            Err(_err) => break,
+        };
 
         // Update UI
         let start = Instant::now();
@@ -926,6 +953,11 @@ async fn worker_thread(
                     .await?;
             }
             Err(err) => {
+                tx_dispatch
+                    .send(Dispatch::Errored(HashIndex::get_hash_index(
+                        &install.installation,
+                    )))
+                    .await?;
                 error!(output, "job failed: {err}").await;
                 errors = true;
             }

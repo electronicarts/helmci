@@ -53,6 +53,16 @@ impl InstallationSet {
     pub fn contains(&self, i: &Installation) -> bool {
         self.0.contains(&HashIndex::get_hash_index(i))
     }
+
+    /// Remove a suplied hash to the set.
+    pub fn remove_hash(&mut self, i: &HashIndex) -> bool {
+        self.0.remove(i)
+    }
+
+    /// Is set empty?
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 /// Has the depends been satisified for this installation?
