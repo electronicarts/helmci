@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.5](https://github.com/electronicarts/helmci/compare/v2.0.4...v2.0.5) (2025-04-29)
+
+
+### Bug Fixes
+
+* fix workers exiting when blocked jobs ([8f32b45](https://github.com/electronicarts/helmci/commit/8f32b456ed9c98f8de2294f93a99d15bfb798b39))
+* make lint operation use charts properly ([97c3673](https://github.com/electronicarts/helmci/commit/97c36736a03a38ce12d97e6002f8dc73ebf3ca60))
+* update nix flake inputs ([16ac75c](https://github.com/electronicarts/helmci/commit/16ac75c1185761ba239a51a231df9b35339954d6))
+
 ## [2.0.4](https://github.com/electronicarts/helmci/compare/v2.0.3...v2.0.4) (2025-03-27)
 
 
