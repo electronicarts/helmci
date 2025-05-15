@@ -235,7 +235,7 @@ fn commands_to_table<'a>(items: Vec<Row<'a>>, title: Line<'a>, border_style: Sty
         Constraint::Percentage(100),
     ];
 
-    let list = Table::new(items, &widths)
+    Table::new(items, &widths)
         .block(
             Block::default()
                 .title(title)
@@ -251,8 +251,7 @@ fn commands_to_table<'a>(items: Vec<Row<'a>>, title: Line<'a>, border_style: Sty
                 .fg(Color::Black)
                 .bg(Color::White),
         )
-        .highlight_symbol(">>");
-    list
+        .highlight_symbol(">>")
 }
 
 fn installations_to_table(items: Vec<Row>, border_style: Style) -> Table {
@@ -263,7 +262,7 @@ fn installations_to_table(items: Vec<Row>, border_style: Style) -> Table {
         Constraint::Length(8),
     ];
 
-    let list = Table::new(items, &widths)
+    Table::new(items, &widths)
         .block(
             Block::default()
                 .title("Jobs")
@@ -282,8 +281,7 @@ fn installations_to_table(items: Vec<Row>, border_style: Style) -> Table {
                 .fg(Color::Black)
                 .bg(Color::White),
         )
-        .highlight_symbol(">>");
-    list
+        .highlight_symbol(">>")
 }
 
 trait HasRows {
@@ -594,13 +592,11 @@ impl State {
 
     fn update_selected_items(&mut self, installation: Option<Arc<Installation>>) {
         let list = if let Some(installation) = installation {
-            let list = self
-                .commands
+            self.commands
                 .iter()
                 .filter(|item| item.installation.id == installation.id)
                 .cloned()
-                .collect();
-            list
+                .collect()
         } else {
             vec![]
         };

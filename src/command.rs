@@ -260,9 +260,9 @@ impl Display for CommandLine {
 
 impl std::fmt::Debug for CommandLine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "CommandLine(\"{:?}", self.cmd)?;
+        write!(f, "CommandLine(\"{}", self.cmd.display())?;
         for arg in &self.args {
-            write!(f, " {arg:?}")?;
+            write!(f, " {}", arg.display())?;
         }
         write!(f, "\")")?;
         Ok(())

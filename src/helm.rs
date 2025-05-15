@@ -55,7 +55,7 @@ pub struct Installation {
 }
 
 impl Installation {
-    pub fn get_display_version(&self) -> &str {
+    pub const fn get_display_version(&self) -> &str {
         match &self.chart_reference {
             ChartReference::Helm { chart_version, .. }
             | ChartReference::Oci { chart_version, .. } => chart_version.as_str(),
