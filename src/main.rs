@@ -67,14 +67,6 @@ pub struct Update {
     pub value: String,
 }
 
-/// For command line options, we need to control the upgrade process.
-#[derive(Clone, Copy)] // Add Clone and Copy traits
-enum UpgradeControl {
-    BypassAndAssumeYes,
-    BypassAndAssumeNo,
-    Normal,
-}
-
 impl FromStr for Update {
     type Err = anyhow::Error;
 
@@ -106,30 +98,19 @@ async fn run_job(
     command: &Request,
     installation: &Arc<DownloadedInstallation>,
     tx: &MultiOutput,
-    upgrade_control: &UpgradeControl,
 ) -> Result<JobSuccess> {
     match command {
-        Request::Upgrade { .. } => {
+        Request::Upgrade {
+            skip_upgrade_on_no_changes,
+        } => {
             let diff_result = helm::diff(installation, tx).await?;
-            match diff_result {
-                DiffResult::NoChanges => {
-                    match upgrade_control {
-                        UpgradeControl::BypassAndAssumeYes => {
-                            helm::upgrade(installation, tx, true).await?;
-                            helm::upgrade(installation, tx, false).await?;
-                            Ok(JobSuccess::Completed)
-                        }
-                        UpgradeControl::BypassAndAssumeNo | UpgradeControl::Normal => {
-                            // Do nothing, as these are implicit or default cases
-                            Ok(JobSuccess::Skipped)
-                        }
-                    }
-                }
-                DiffResult::Changes => {
+            match (diff_result, skip_upgrade_on_no_changes) {
+                (DiffResult::Changes, _) | (_, false) => {
                     helm::upgrade(installation, tx, true).await?;
                     helm::upgrade(installation, tx, false).await?;
                     Ok(JobSuccess::Completed)
                 }
+                (DiffResult::NoChanges, true) => Ok(JobSuccess::Skipped),
             }
         }
         Request::Diff { .. } => {
@@ -215,15 +196,9 @@ struct Args {
 enum Request {
     /// Upgrade/install releases.
     Upgrade {
-        /// Bypass skip upgrade on no changes.
-        #[clap(long, short = 'b')]
-        bypass_skip_upgrade_on_no_changes: bool,
-        /// Assume yes or no.
-        #[clap(long, short = 'y', conflicts_with = "no", default_value_t = false)]
-        yes: bool,
-        /// Assume no.
-        #[clap(long, short = 'n', conflicts_with = "yes", default_value_t = false)]
-        no: bool,
+        /// Skip upgrade on no changes.
+        #[clap(long, short = 'b', default_value_t = true, num_args = 1)]
+        skip_upgrade_on_no_changes: bool,
     },
 
     /// Diff releases with current state.
@@ -347,28 +322,6 @@ async fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    // Extract the bypass_skip_upgrade_on_no_changes and bypass_assume_yes flags if the command is Upgrade
-    let upgrade_control = if let Request::Upgrade {
-        bypass_skip_upgrade_on_no_changes,
-        yes,
-        no,
-    } = args.command
-    {
-        if bypass_skip_upgrade_on_no_changes {
-            if yes {
-                UpgradeControl::BypassAndAssumeYes
-            } else if no {
-                UpgradeControl::BypassAndAssumeNo
-            } else {
-                UpgradeControl::Normal
-            }
-        } else {
-            UpgradeControl::Normal
-        }
-    } else {
-        UpgradeControl::Normal
-    };
-
     let output_types = if args.output.is_empty() {
         vec![OutputFormat::Text]
     } else {
@@ -405,7 +358,7 @@ async fn main() -> Result<()> {
         .await;
 
     // Save the error for now so we can clean up.
-    let rc = do_task(command, &args, &output_pipe, upgrade_control).await;
+    let rc = do_task(command, &args, &output_pipe).await;
 
     // Log the error.
     if let Err(err) = &rc {
@@ -436,12 +389,7 @@ async fn main() -> Result<()> {
     rc
 }
 
-async fn do_task(
-    command: Arc<Request>,
-    args: &Args,
-    output: &output::MultiOutput,
-    upgrade_control: UpgradeControl,
-) -> Result<()> {
+async fn do_task(command: Arc<Request>, args: &Args, output: &output::MultiOutput) -> Result<()> {
     let (skipped_list, todo) = generate_todo(args, output).await?;
 
     let mut skipped = InstallationSet::new();
@@ -451,7 +399,7 @@ async fn do_task(
     }
 
     let cache = Cache::new(&args.vdir);
-    run_jobs_concurrently(command, cache, todo, output, skipped, &upgrade_control).await
+    run_jobs_concurrently(command, cache, todo, output, skipped).await
 }
 
 type SkippedResult = Arc<Installation>;
@@ -646,7 +594,6 @@ async fn run_jobs_concurrently(
     todo: Vec<Arc<Installation>>,
     output: &output::MultiOutput,
     skipped: InstallationSet,
-    upgrade_control: &UpgradeControl,
 ) -> Result<()> {
     let downloaded_installations = if request.requires_helm_repos() {
         info!(output, "Downloading repos for installation").await;
@@ -698,7 +645,6 @@ async fn run_jobs_concurrently(
             downloaded_installations,
             output,
             skipped,
-            *upgrade_control,
         )
         .await?;
     }
@@ -774,7 +720,6 @@ async fn run_jobs_concurrently_with_repos(
     todo: Vec<Arc<DownloadedInstallation>>,
     output: &output::MultiOutput,
     skipped: InstallationSet,
-    upgrade_control: UpgradeControl,
 ) -> Result<()> {
     let do_depends = request.do_depends();
     // let skip_depends = !matches!(jobs.0, Task::Upgrade | Task::Test);
@@ -807,9 +752,9 @@ async fn run_jobs_concurrently_with_repos(
             let tx_dispatch = tx_dispatch.clone();
             let output = output.clone();
             let request = request.clone();
-            tokio::spawn(async move {
-                worker_thread(&request, &rx_job, &tx_dispatch, &output, &upgrade_control).await
-            })
+            tokio::spawn(
+                async move { worker_thread(&request, &rx_job, &tx_dispatch, &output).await },
+            )
         })
         .collect();
 
@@ -926,7 +871,6 @@ async fn worker_thread(
     rx_job: &async_channel::Receiver<Arc<DownloadedInstallation>>,
     tx_dispatch: &mpsc::Sender<Dispatch>,
     output: &MultiOutput,
-    upgrade_control: &UpgradeControl,
 ) -> Result<()> {
     let mut errors = false;
 
@@ -943,7 +887,7 @@ async fn worker_thread(
             .await;
 
         // Execute the job
-        let result = run_job(command, &install, output, upgrade_control).await;
+        let result = run_job(command, &install, output).await;
         match &result {
             Ok(_) => {
                 tx_dispatch
