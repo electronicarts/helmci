@@ -14,6 +14,7 @@ use async_trait::async_trait;
 use futures::Future;
 use hyper_rustls::HttpsConnector;
 use hyper_util::client::legacy::connect::HttpConnector;
+use serde_json::json;
 use slack_morphism::errors::SlackClientError;
 use slack_morphism::prelude::*;
 use std::collections::HashMap;
@@ -43,7 +44,7 @@ pub struct SlackOutput {
     thread: Option<JoinHandle<()>>,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 enum Status {
     Pending,
     InProgress,
@@ -66,6 +67,12 @@ impl Display for Status {
 }
 
 struct DisplayableDuration(Option<Duration>);
+
+impl DisplayableDuration {
+    const fn is_some(&self) -> bool {
+        self.0.is_some()
+    }
+}
 
 impl Display for DisplayableDuration {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -113,8 +120,8 @@ fn truncate(s: &str, max_chars: usize) -> &str {
     }
 }
 
-fn results_to_string(state: &State) -> String {
-    let mut data: Vec<JobResult> = state
+fn results_to_vec(state: &State) -> Vec<JobResult> {
+    state
         .jobs
         .iter()
         .filter_map(|installation| {
@@ -123,8 +130,10 @@ fn results_to_string(state: &State) -> String {
                 .get(&installation.id)
                 .map(|result| to_job_result(result, installation))
         })
-        .collect();
+        .collect()
+}
 
+fn results_to_totals(state: &State) -> (Status, DisplayableDuration) {
     let now = Instant::now();
     let duration = match (state.start_instant, &state.finished) {
         (None, None) => None,
@@ -137,25 +146,7 @@ fn results_to_string(state: &State) -> String {
         Some((status, _)) => *status,
     };
 
-    let total_title = match &state.finished {
-        None => "RUNNING",
-        Some(_) => "TOTAL",
-    };
-
-    data.push(JobResult {
-        status,
-        cluster: "",
-        release: total_title,
-        namespace: "",
-        duration: DisplayableDuration(duration),
-    });
-
-    Table::new(data)
-        .with(Style::markdown())
-        .with(Modify::new(Rows::new(..)).with(Alignment::left()))
-        .with(Modify::new(Columns::first()).with(Alignment::center()))
-        .with(Modify::new(Rows::last()).with(Padding::new(1, 1, 1, 0).fill(' ', ' ', '-', ' ')))
-        .to_string()
+    (status, DisplayableDuration(duration))
 }
 
 fn to_job_result<'a>(
@@ -440,8 +431,7 @@ impl SlackState {
 
 fn get_update_content(state: &State) -> SlackMessageContent {
     let title = slack_title(state);
-
-    let mut installation_blocks = get_installation_blocks(state, &title);
+    let mut installation_blocks = get_installation_blocks(state);
     let mut outdated_blocks = get_outdated_blocks(state);
 
     let mut blocks = vec![];
@@ -453,15 +443,94 @@ fn get_update_content(state: &State) -> SlackMessageContent {
         .with_text(title)
 }
 
-fn get_installation_blocks(state: &State, title: &str) -> Vec<SlackBlock> {
-    let status = results_to_string(state);
-    let status = ["```".to_string(), status, "```".to_string()];
-    let status = status.join("\n");
-    let markdown = SlackBlockPlainTextOnly::from(title);
-    let heading = SlackHeaderBlock::new(markdown);
-    let markdown = SlackBlockMarkDownText::new(status);
-    let block = SlackSectionBlock::new().with_text(markdown.into());
-    let blocks = slack_blocks![some_into(heading), some_into(block)];
+fn get_installation_blocks(state: &State) -> Vec<SlackBlock> {
+    let vec = results_to_vec(state);
+    let totals = results_to_totals(state);
+
+    let mut blocks: Vec<SlackBlock> = vec![];
+
+    for status in [
+        Status::Skipped,
+        Status::Pending,
+        Status::InProgress,
+        Status::Complete,
+        Status::Failed,
+    ] {
+        let status_vec: Vec<&JobResult> = vec.iter().filter(|x| x.status == status).collect();
+
+        if !status_vec.is_empty() {
+            {
+                let title = slack_status_title(state, status);
+                let text = SlackBlockPlainTextOnly::from(title);
+                let heading = SlackHeaderBlock::new(text);
+                blocks.push(heading.into());
+            }
+
+            {
+                let elements: Vec<_> = status_vec
+                    .iter()
+                    .map(|x| {
+                        let mut elements = vec![
+                            json!({
+                              "type": "text",
+                              "text": format!("{}/{}/", x.cluster, x.namespace)
+                            }),
+                            json!({
+                              "type": "text",
+                              "text": x.release,
+                              "style": {
+                                  "bold": true
+                              }
+                            }),
+                        ];
+
+                        if x.duration.is_some() {
+                            elements.push(json!({
+                                "type": "text",
+                                "text": format!(" ({})", x.duration),
+                            }));
+                        }
+
+                        json!({
+                            "type": "rich_text_section",
+                            "elements": elements
+                        })
+                    })
+                    .collect();
+
+                let value = json!({
+                    "elements": elements
+                });
+                let block = SlackBlock::RichText(value);
+                blocks.push(block);
+            }
+        }
+    }
+
+    {
+        let title = "Result";
+        let text = SlackBlockPlainTextOnly::from(title);
+        let heading = SlackHeaderBlock::new(text);
+        blocks.push(heading.into());
+    }
+
+    {
+        let value = json!({
+            "elements": [
+                {
+                    "type": "rich_text_section",
+                    "elements": [
+                        {
+                          "type": "text",
+                          "text": format!("{} {}", totals.0, totals.1)
+                        }
+                    ]
+                }]
+        });
+        let block = SlackBlock::RichText(value);
+        blocks.push(block);
+    }
+
     blocks
 }
 
@@ -494,6 +563,27 @@ fn slack_title(state: &State) -> String {
         None => "unknown",
     };
     format!("helmci - {task}")
+}
+
+fn slack_status_title(state: &State, status: Status) -> String {
+    let task = match state.request.as_deref() {
+        Some(Request::Diff { .. }) => "diff",
+        Some(Request::Upgrade { .. }) => "upgrade",
+        Some(Request::Test { .. }) => "test",
+        Some(Request::Template { .. }) => "template",
+        Some(Request::Outdated { .. }) => "outdated",
+        Some(Request::Update { .. }) => "update",
+        Some(Request::RewriteLocks) => "rewrite locks",
+        None => "unknown",
+    };
+    let status = match status {
+        Status::Pending => "Pending",
+        Status::InProgress => "In Progress",
+        Status::Complete => "Complete",
+        Status::Skipped => "Skipped",
+        Status::Failed => "Failed",
+    };
+    format!("helmci - {task} - {status}")
 }
 
 async fn update_results(state: &State, slack: &mut SlackState) -> Instant {
