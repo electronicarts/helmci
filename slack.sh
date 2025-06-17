@@ -7,6 +7,6 @@ export SLACK_CHANNEL
 
 SLACK_URL="$(pass show ea/slack/url)"
 SLACK_API_TOKEN="$(pass show ea/slack/token)"
-SLACK_CHANNEL="$(pass show ea/slack/token)"
+SLACK_CHANNEL="$(pass show ea/slack/channel)"
 
 exec "$@"
