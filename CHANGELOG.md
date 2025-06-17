@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.0.6](https://github.com/electronicarts/helmci/compare/v2.0.5...v2.0.6) (2025-06-17)
+
+
+### Bug Fixes
+
+* correct typo in slack.sh script ([cd5b5ca](https://github.com/electronicarts/helmci/commit/cd5b5ca38e13ca576b6e739021077943a57f0f86))
+* reformat slack installation block as non-table ([0bb8640](https://github.com/electronicarts/helmci/commit/0bb8640a4f07f86cb50c85b923bc962e6c5e9c39))
+* Simplify --bypass_skip_upgrade_on_no_changes option ([95da67c](https://github.com/electronicarts/helmci/commit/95da67ce57bd88dfd6131b1b3e9ef16ff850f0c2))
+
 ## [2.0.5](https://github.com/electronicarts/helmci/compare/v2.0.4...v2.0.5) (2025-04-29)
 
 
