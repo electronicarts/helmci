@@ -334,8 +334,8 @@ impl SlackState {
             let mut blocks: Vec<SlackBlock> = Vec::with_capacity(num_data + 1);
 
             let title = slack_title(state);
-            let markdown = SlackBlockPlainTextOnly::from(title.clone());
-            let heading = SlackHeaderBlock::new(markdown);
+            let text = SlackBlockPlainTextOnly::from(title.clone());
+            let heading = SlackHeaderBlock::new(text);
             blocks.push(heading.into());
 
             for (installation, status) in data {
@@ -356,8 +356,8 @@ impl SlackState {
                     "{status} {} was {verb} {version} on {cluster} namespace {}",
                     installation.name, installation.namespace
                 );
-                let markdown = SlackBlockMarkDownText::new(string);
-                let block = SlackSectionBlock::new().with_text(markdown.into());
+                let text = SlackBlockPlainTextOnly::from(string);
+                let block = SlackSectionBlock::new().with_text(text.into());
                 blocks.push(block.into());
             }
 
@@ -380,8 +380,8 @@ impl SlackState {
         let mut blocks: Vec<SlackBlock> = Vec::with_capacity(5);
 
         let title = slack_title(state);
-        let markdown = SlackBlockPlainTextOnly::from(title.clone());
-        let heading = SlackHeaderBlock::new(markdown);
+        let text = SlackBlockPlainTextOnly::from(title.clone());
+        let heading = SlackHeaderBlock::new(text);
         blocks.push(heading.into());
 
         let cmd = match &hr.result {
@@ -389,29 +389,25 @@ impl SlackState {
             Err(err) => &err.cmd,
         };
 
-        let markdown = SlackBlockPlainTextOnly::from(cmd.to_string());
-        let block = SlackSectionBlock::new().with_text(markdown.into());
+        let text = SlackBlockPlainTextOnly::from(cmd.to_string());
+        let block = SlackSectionBlock::new().with_text(text.into());
         blocks.push(block.into());
 
-        let markdown = SlackBlockPlainTextOnly::from(hr.result_line());
-        let block = SlackSectionBlock::new().with_text(markdown.into());
+        let text = SlackBlockPlainTextOnly::from(hr.result_line());
+        let block = SlackSectionBlock::new().with_text(text.into());
         blocks.push(block.into());
 
         let string = truncate(hr.stdout(), 150);
         if !string.is_empty() {
-            let string = format!("```{string}```\n");
-            let markdown = SlackBlockMarkDownText::from(string);
-            let block = SlackSectionBlock::new().with_text(markdown.into());
-            blocks.push(block.into());
+            let block = preformat_block(string);
+            blocks.push(block);
         }
 
         let stderr = filter_stderr(hr.stderr());
         let string = truncate(&stderr, 150);
         if !string.is_empty() {
-            let string = format!("```{string}```\n");
-            let markdown = SlackBlockMarkDownText::from(string);
-            let block = SlackSectionBlock::new().with_text(markdown.into());
-            blocks.push(block.into());
+            let block = preformat_block(string);
+            blocks.push(block);
         }
 
         let content = SlackMessageContent::new()
@@ -439,6 +435,19 @@ fn get_update_content(state: &State) -> SlackMessageContent {
     SlackMessageContent::new()
         .with_blocks(blocks)
         .with_text(title)
+}
+
+fn preformat_block(string: &str) -> SlackBlock {
+    let value = json!({
+        "elements": [{
+            "type": "rich_text_preformatted",
+            "elements": [{
+                "type": "text",
+                "text": string
+            }]
+        }]
+    });
+    SlackBlock::RichText(value)
 }
 
 fn get_installation_blocks(state: &State) -> Vec<SlackBlock> {
@@ -538,12 +547,9 @@ fn get_outdated_blocks(state: &State) -> Vec<SlackBlock> {
     } else {
         let title = "Out of date installations";
         let status = versions_to_string(state);
-        let status = ["```".to_string(), status, "```".to_string()];
-        let status = status.join("\n");
-        let markdown = SlackBlockPlainTextOnly::from(title);
-        let heading = SlackHeaderBlock::new(markdown);
-        let markdown = SlackBlockMarkDownText::new(status);
-        let block = SlackSectionBlock::new().with_text(markdown.into());
+        let text = SlackBlockPlainTextOnly::from(title);
+        let heading = SlackHeaderBlock::new(text);
+        let block = preformat_block(&status);
         let blocks = slack_blocks![some_into(heading), some_into(block)];
         blocks
     }
