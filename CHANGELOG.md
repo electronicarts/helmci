@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.7](https://github.com/electronicarts/helmci/compare/v2.0.6...v2.0.7) (2025-07-01)
+
+
+### Bug Fixes
+
+* Simplify sending preformated text to slack ([9ce8966](https://github.com/electronicarts/helmci/commit/9ce896684511aeca371e563f9fa7be754b22b989))
+
 ## [2.0.6](https://github.com/electronicarts/helmci/compare/v2.0.5...v2.0.6) (2025-06-17)
 
 
