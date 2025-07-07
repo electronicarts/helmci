@@ -103,6 +103,7 @@ async fn run_job(
         Request::Upgrade {
             skip_upgrade_on_no_changes,
         } => {
+            helm::lint(installation, tx).await?;
             let diff_result = helm::diff(installation, tx).await?;
             match (diff_result, skip_upgrade_on_no_changes) {
                 (DiffResult::Changes, _) | (_, false) => {
