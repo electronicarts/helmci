@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.8](https://github.com/electronicarts/helmci/compare/v2.0.7...v2.0.8) (2025-07-07)
+
+
+### Bug Fixes
+
+* add lint check before upgrade ([4b95d66](https://github.com/electronicarts/helmci/commit/4b95d6659e367088ee56134615d5dcae08516852))
+
 ## [2.0.7](https://github.com/electronicarts/helmci/compare/v2.0.6...v2.0.7) (2025-07-01)
 
 
