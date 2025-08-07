@@ -189,10 +189,10 @@ fn file_to_chart(
         .map_err(|e| Error::File(file_path.clone(), e))?;
     let size = metadata.len();
 
-    if let Some(expected_size) = expected_size {
-        if expected_size != size {
-            return Err(Error::SizeMismatch(file_path, expected_size, size));
-        }
+    if let Some(expected_size) = expected_size
+        && expected_size != size
+    {
+        return Err(Error::SizeMismatch(file_path, expected_size, size));
     }
 
     let meta = Meta {
@@ -245,7 +245,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires external download"]
     async fn test_download_by_version() {
         let index =
             Repo::download_index(&Url::parse("oci://public.ecr.aws/karpenter").unwrap()).unwrap();
@@ -271,7 +271,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires external download"]
     async fn test_download_by_meta() {
         let index =
             Repo::download_index(&Url::parse("oci://public.ecr.aws/karpenter").unwrap()).unwrap();

@@ -553,10 +553,10 @@ impl ParsedOci {
             let path = format!("{chart_name}/{chart_name}");
             Self::Public { path }.pipe(Ok)
         } else {
-            return Err(anyhow::anyhow!(
+            Err(anyhow::anyhow!(
                 "Unsupported OCI repo url {url}",
                 url = url.to_string()
-            ));
+            ))
         }
     }
 

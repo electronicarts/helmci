@@ -285,16 +285,16 @@ fn installations_to_table(items: Vec<Row>, border_style: Style) -> Table {
 }
 
 trait HasRows {
-    fn get_row(&self, state: &State) -> Row;
+    fn get_row(&self, state: &State) -> Row<'_>;
 }
 
 trait HasMultilineText {
-    fn get_title(&self, state: &State) -> Line;
+    fn get_title(&self, state: &State) -> Line<'_>;
     // fn get_block_title(&self) -> String;
     fn get_text<'a>(&'a self, state: &'a State) -> Vec<Line<'a>>;
 }
 
-fn key_value_space(key: &str, value: String) -> Line {
+fn key_value_space(key: &str, value: String) -> Line<'_> {
     let spans = vec![
         Span::styled(format!("{key}: "), Style::default().fg(Color::Blue)),
         Span::styled(value, Style::default().fg(Color::White)),
@@ -304,11 +304,11 @@ fn key_value_space(key: &str, value: String) -> Line {
 }
 
 impl HasMultilineText for Logs {
-    fn get_title(&self, _state: &State) -> Line {
+    fn get_title(&self, _state: &State) -> Line<'_> {
         Line::from(Span::styled("Global Logs", Style::default()))
     }
 
-    fn get_text(&self, _state: &State) -> Vec<Line> {
+    fn get_text(&self, _state: &State) -> Vec<Line<'_>> {
         let result: Vec<Line> = self
             .0
             .iter()
@@ -330,7 +330,7 @@ impl HasMultilineText for Logs {
 }
 
 impl HasRows for Installation {
-    fn get_row(&self, state: &State) -> Row {
+    fn get_row(&self, state: &State) -> Row<'_> {
         let status = state.job_status.get(&self.id);
         let style = match status {
             // Some(JobStatus::Skipped) => Style::default().fg(Color::DarkGray),
@@ -366,7 +366,7 @@ impl HasRows for Installation {
 }
 
 impl HasMultilineText for Installation {
-    fn get_title(&self, state: &State) -> Line {
+    fn get_title(&self, state: &State) -> Line<'_> {
         let status = state.job_status.get(&self.id);
         let style = match status {
             // Some(JobStatus::Skipped) => Style::default().fg(Color::DarkGray),
@@ -437,7 +437,7 @@ impl HasMultilineText for Installation {
 }
 
 impl HasRows for HelmResult {
-    fn get_row(&self, _state: &State) -> Row {
+    fn get_row(&self, _state: &State) -> Row<'_> {
         let duration = self.duration();
         let cmd = self.command_line();
 
@@ -456,7 +456,7 @@ impl HasRows for HelmResult {
 }
 
 impl HasMultilineText for HelmResult {
-    fn get_title(&self, _state: &State) -> Line {
+    fn get_title(&self, _state: &State) -> Line<'_> {
         let str = self.command.to_string();
         let span = if self.is_err() {
             Span::styled(str, Style::default().fg(Color::Red))
@@ -466,7 +466,7 @@ impl HasMultilineText for HelmResult {
         Line::from(span)
     }
 
-    fn get_text(&self, _state: &State) -> Vec<Line> {
+    fn get_text(&self, _state: &State) -> Vec<Line<'_>> {
         let mut lines = vec![key_value_space("Result", self.result_line())];
         lines.push(key_value_space("Exit Code", self.exit_code().to_string()));
 
@@ -508,7 +508,7 @@ fn get_log_style(level: LogLevel) -> Style {
         LogLevel::Trace => style.fg(Color::DarkGray),
     }
 }
-fn format_lines(str: &str, style: Style) -> Vec<Line> {
+fn format_lines(str: &str, style: Style) -> Vec<Line<'_>> {
     let mut lines = vec![];
     for line in str.lines() {
         lines.push(Line::from(vec![
@@ -582,10 +582,10 @@ impl State {
     }
 
     fn add_command(&mut self, ir: Arc<HelmResult>) {
-        if let Some(job) = self.jobs.get_selected() {
-            if job.id == ir.installation.id {
-                self.selected_commands.items.push(ir.clone());
-            }
+        if let Some(job) = self.jobs.get_selected()
+            && job.id == ir.installation.id
+        {
+            self.selected_commands.items.push(ir.clone());
         }
         self.commands.push(ir);
     }
@@ -609,7 +609,7 @@ pub fn start() -> Result<(TuiOutput, Sender)> {
     crossterm::terminal::enable_raw_mode()?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
-    execute!(terminal.backend_mut(), EnterAlternateScreen).unwrap();
+    execute!(terminal.backend_mut(), EnterAlternateScreen)?;
     terminal.clear()?;
     terminal.hide_cursor()?;
 
@@ -624,8 +624,7 @@ pub fn start() -> Result<(TuiOutput, Sender)> {
             terminal.backend_mut(),
             LeaveAlternateScreen,
             DisableMouseCapture
-        )
-        .unwrap();
+        )?;
         terminal.show_cursor()?;
         Ok(())
     });

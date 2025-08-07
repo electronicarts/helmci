@@ -112,10 +112,10 @@ impl Entry {
             .map_err(|e| Error::File(file_path.clone(), e))?;
         let size = metadata.len();
 
-        if let Some(expected_size) = expected_size {
-            if expected_size != size {
-                return Err(Error::SizeMismatch(file_path, expected_size, size));
-            }
+        if let Some(expected_size) = expected_size
+            && expected_size != size
+        {
+            return Err(Error::SizeMismatch(file_path, expected_size, size));
         }
 
         let meta = Meta {
@@ -155,7 +155,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires external file"]
     async fn test_get_by_path() {
         let expected_hash =
             Sha256Hash::new("0a2fa83c8d432594612dde50eadfbd23bb795a0f017815dc8023fb8d9e40d30d");
@@ -181,7 +181,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires external file"]
     async fn test_get_by_meta() {
         let expected_hash =
             Sha256Hash::new("0a2fa83c8d432594612dde50eadfbd23bb795a0f017815dc8023fb8d9e40d30d");

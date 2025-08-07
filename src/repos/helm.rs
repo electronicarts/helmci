@@ -99,10 +99,10 @@ impl Entry {
             .map_err(|e| Error::File(file_path.clone(), e))?;
         let size = metadata.len();
 
-        if let Some(expected_size) = expected_size {
-            if expected_size != size {
-                return Err(Error::SizeMismatch(file_path, expected_size, size));
-            }
+        if let Some(expected_size) = expected_size
+            && expected_size != size
+        {
+            return Err(Error::SizeMismatch(file_path, expected_size, size));
         }
 
         let meta = Meta {
@@ -248,7 +248,7 @@ generated: 2016-10-06T16:23:20.499029981-06:00
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires external download"]
     async fn test_download_by_version() {
         let index = Repo::download_index(
             &Url::parse("https://kubernetes.github.io/ingress-nginx/").unwrap(),
@@ -279,7 +279,7 @@ generated: 2016-10-06T16:23:20.499029981-06:00
     }
 
     #[tokio::test]
-    #[ignore]
+    #[ignore = "requires external download"]
     async fn test_download_by_meta() {
         let index = Repo::download_index(
             &Url::parse("https://kubernetes.github.io/ingress-nginx/").unwrap(),

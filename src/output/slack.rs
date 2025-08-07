@@ -118,7 +118,7 @@ fn truncate(s: &str, max_chars: usize) -> &str {
     }
 }
 
-fn results_to_vec(state: &State) -> Vec<JobResult> {
+fn results_to_vec(state: &State) -> Vec<JobResult<'_>> {
     state
         .jobs
         .iter()
