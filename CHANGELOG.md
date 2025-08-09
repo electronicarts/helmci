@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.9](https://github.com/electronicarts/helmci/compare/v2.0.8...v2.0.9) (2025-08-07)
+
+
+### Bug Fixes
+
+* update helm inputs ([a9ca237](https://github.com/electronicarts/helmci/commit/a9ca2370fd9deebeb98956d8e4a64efd210ac16a))
+
 ## [2.0.8](https://github.com/electronicarts/helmci/compare/v2.0.7...v2.0.8) (2025-07-07)
 
 
