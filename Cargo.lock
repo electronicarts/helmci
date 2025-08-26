@@ -2921,9 +2921,9 @@ dependencies = [
 
 [[package]]
 name = "slack-morphism"
-version = "2.14.0"
+version = "2.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94efd4acc9deb672b96085970ab68d91448dc5ce439799cc6ac421bf62736bac"
+checksum = "0f50718924011e91659dce8e6c225a62d79ccda953359e3556c8715fe3c7c8ff"
 dependencies = [
  "async-recursion",
  "async-trait",
