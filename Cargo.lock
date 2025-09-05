@@ -133,14 +133,16 @@ dependencies = [
 
 [[package]]
 name = "async-compression"
-version = "0.4.30"
+version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "977eb15ea9efd848bb8a4a1a2500347ed7f0bf794edf0dc3ddcf439f43d36b23"
+checksum = "5bee399cc3a623ec5a2db2c5b90ee0190a2260241fbe0c023ac8f7bab426aaf8"
 dependencies = [
  "compression-codecs",
  "compression-core",
+ "flate2",
  "futures-core",
  "futures-io",
+ "memchr",
  "pin-project-lite",
 ]
 
@@ -612,13 +614,15 @@ dependencies = [
 
 [[package]]
 name = "compression-codecs"
-version = "0.4.30"
+version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "485abf41ac0c8047c07c87c72c8fb3eb5197f6e9d7ded615dfd1a00ae00a0f64"
+checksum = "c7eea68f0e02c2b0aa8856e9a9478444206d4b6828728e7b0697c0f8cca265cb"
 dependencies = [
  "compression-core",
  "flate2",
+ "futures-core",
  "memchr",
+ "pin-project-lite",
 ]
 
 [[package]]
@@ -1300,7 +1304,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "helmci"
-version = "2.0.8"
+version = "2.0.9"
 dependencies = [
  "anyhow",
  "async-channel 2.5.0",
