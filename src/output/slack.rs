@@ -191,7 +191,7 @@ fn versions_to_string(state: &State) -> String {
 }
 
 pub fn config_env_var(name: &str) -> Result<String, Error> {
-    std::env::var(name).map_err(|e| anyhow::anyhow!("{}: {}", name, e))
+    std::env::var(name).map_err(|e| anyhow::anyhow!("{name}: {e}"))
 }
 
 #[derive(Clone)]

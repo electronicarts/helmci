@@ -342,10 +342,7 @@ pub async fn diff(downloaded: &DownloadedInstallation, tx: &MultiOutput) -> Resu
         }
         Err(err) => {
             debug!(tx, "Other exception encountered").await; // If the command result is an error, return Unknown.
-            Err(anyhow::anyhow!(
-                "diff operation failed: {}",
-                err.to_string()
-            ))
+            Err(anyhow::anyhow!("diff operation failed: {err}"))
         }
     };
 
@@ -553,10 +550,7 @@ impl ParsedOci {
             let path = format!("{chart_name}/{chart_name}");
             Self::Public { path }.pipe(Ok)
         } else {
-            Err(anyhow::anyhow!(
-                "Unsupported OCI repo url {url}",
-                url = url.to_string()
-            ))
+            Err(anyhow::anyhow!("Unsupported OCI repo url {url}"))
         }
     }
 
