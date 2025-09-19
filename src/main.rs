@@ -74,11 +74,11 @@ impl FromStr for Update {
         let mut split = s.splitn(2, '=');
         let name = split
             .next()
-            .ok_or_else(|| anyhow!("invalid update: {}", s))?
+            .ok_or_else(|| anyhow!("invalid update: {s}"))?
             .to_string();
         let value = split
             .next()
-            .ok_or_else(|| anyhow!("invalid update: {}", s))?
+            .ok_or_else(|| anyhow!("invalid update: {s}"))?
             .to_string();
         Ok(Update { name, value })
     }
@@ -238,17 +238,17 @@ impl FromStr for ReleaseFilter {
         let mut split = s.splitn(2, '=');
         let key = split
             .next()
-            .ok_or_else(|| anyhow!("invalid filter: {}", s))?
+            .ok_or_else(|| anyhow!("invalid filter: {s}"))?
             .to_string();
         let value = split
             .next()
-            .ok_or_else(|| anyhow!("invalid filter: {}", s))?
+            .ok_or_else(|| anyhow!("invalid filter: {s}"))?
             .to_string();
         match key.as_str() {
             "chart_type" => Ok(ReleaseFilter::ChartType(value)),
             "chart_name" => Ok(ReleaseFilter::ChartName(value)),
             "release_name" => Ok(ReleaseFilter::ReleaseName(value)),
-            _ => Err(anyhow!("invalid filter key: {}", key)),
+            _ => Err(anyhow!("invalid filter key: {key}")),
         }
     }
 }
