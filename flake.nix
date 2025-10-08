@@ -27,11 +27,6 @@
         };
         pkgs-unstable = nixpkgs-unstable.legacyPackages.${system};
 
-        osxlibs = pkgs.lib.lists.optionals pkgs.stdenv.isDarwin [
-          pkgs.darwin.apple_sdk.frameworks.Security
-          pkgs.darwin.apple_sdk.frameworks.Foundation
-        ];
-
         src = ./.;
 
         rustPlatform = pkgs.rust-bin.stable.latest.default;
@@ -59,7 +54,6 @@
         pkg = craneLib.buildPackage {
           inherit src;
           inherit cargoArtifacts;
-          buildInputs = osxlibs;
 
           # Add extra inputs here or any other derivation settings
           doCheck = true;
@@ -84,7 +78,6 @@
 
         helmci = pkgs.writeShellScriptBin "helmci" ''
           export HELM_PATH=${helm}/bin/helm
-          export AWS_PATH=${awscli}/bin/aws
           exec ${pkg}/bin/helmci "$@"
         '';
 
@@ -100,8 +93,7 @@
             sops
             vals
             gnupg
-          ]
-          ++ osxlibs;
+          ];
         };
       in
       {
@@ -110,7 +102,6 @@
           inherit
             helmci
             helm
-            awscli
             sops
             vals
             gnupg
@@ -119,7 +110,6 @@
             mkdir -p $out/bin
             ln -s ${helmci}/bin/helmci $out/bin/helmci
             ln -s ${helm}/bin/helm $out/bin/helm
-            ln -s ${awscli}/bin/aws $out/bin/aws
             ln -s ${sops}/bin/sops $out/bin/sops
             ln -s ${vals}/bin/vals $out/bin/vals
             ln -s ${gnupg}/bin/gpg $out/bin/gpg

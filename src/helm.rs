@@ -4,6 +4,9 @@
 //!
 //! This defines a list of commands that take a message to the output server and an installation to act on.
 use anyhow::Result;
+use aws_config::{BehaviorVersion, Region};
+use aws_sdk_ecr::types::ImageDetail;
+use aws_sdk_ecrpublic::types::ImageTagDetail;
 use semver::Version;
 use serde::Deserialize;
 use std::{
@@ -29,9 +32,9 @@ fn helm_path() -> OsString {
     std::env::var_os("HELM_PATH").unwrap_or_else(|| "helm".into())
 }
 
-fn aws_path() -> OsString {
-    std::env::var_os("AWS_PATH").unwrap_or_else(|| "aws".into())
-}
+// fn aws_path() -> OsString {
+//     std::env::var_os("AWS_PATH").unwrap_or_else(|| "aws".into())
+// }
 
 /// A unique identifier for an installation.
 pub type InstallationId = u16;
@@ -78,7 +81,6 @@ pub enum Command {
     Template,
     UpgradeDry,
     Upgrade,
-    Outdated,
 }
 
 impl Display for Command {
@@ -89,7 +91,6 @@ impl Display for Command {
             Command::Template => "template",
             Command::UpgradeDry => "upgrade(dry)",
             Command::Upgrade => "upgrade(real)",
-            Command::Outdated => "outdated",
         };
         f.write_str(str)
     }
@@ -471,30 +472,6 @@ async fn outdated_helm_chart(
     Ok(())
 }
 
-/// Parser to interpret OCI information.
-#[derive(Deserialize, Debug)]
-struct OciDetails {
-    #[serde(rename = "imageDetails")]
-    image_details: Vec<ImageDetails>,
-}
-
-/// Parser to interpret image details from ECR.
-#[derive(Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-#[allow(dead_code)]
-struct ImageDetails {
-    registry_id: String,
-    repository_name: String,
-    image_digest: String,
-    image_tags: Option<Vec<String>>,
-    image_size_in_bytes: u32,
-    // This can be a float value or a string "2023-11-09T14:07:41+11:00"
-    // Probably depends on aws version.
-    // image_pushed_at: f32,
-    image_manifest_media_type: String,
-    artifact_media_type: String,
-}
-
 /// Public AWS token
 #[derive(Deserialize, Debug)]
 struct AwsToken {
@@ -556,7 +533,7 @@ impl ParsedOci {
 
     async fn get_latest_version(
         &self,
-        installation: &Arc<Installation>,
+        _installation: &Arc<Installation>,
         tx: &MultiOutput,
     ) -> Result<Option<Version>> {
         match self {
@@ -565,40 +542,45 @@ impl ParsedOci {
                 region,
                 path,
             } => {
-                let args: Vec<OsString> = vec![
-                    "ecr".into(),
-                    "describe-images".into(),
-                    "--registry-id".into(),
-                    account.into(),
-                    "--region".into(),
-                    region.into(),
-                    "--repository-name".into(),
-                    path.into(),
-                ];
+                let config = aws_config::defaults(BehaviorVersion::v2025_08_07())
+                    .region(Region::new(region.clone()))
+                    .load()
+                    .await;
+                let client = aws_sdk_ecr::Client::new(&config);
 
-                let command_line = CommandLine::new(aws_path(), args);
-                let result = command_line.run().await;
+                // Create a DescribeImages request.
+                let images = client
+                    .describe_images()
+                    .repository_name(path)
+                    .registry_id(account)
+                    .send()
+                    .await?;
 
-                let rc = match &result {
-                    Ok(CommandSuccess { stdout, .. }) => {
-                        let details: OciDetails = serde_json::from_str(stdout)?;
-                        get_latest_version_from_details(details, tx)
-                            .await
-                            .map_or_else(
-                                || Err(anyhow::anyhow!("no versions found")),
-                                |v| Ok(Some(v)),
-                            )
-                    }
-                    Err(err) => Err(anyhow::anyhow!("The describe-images command failed: {err}")),
-                };
+                let image_details = images.image_details();
 
-                let i_result = HelmResult::from_result(installation, result, Command::Outdated);
-                let i_result = Arc::new(i_result);
-                tx.send(Message::InstallationResult(i_result)).await;
-
-                rc
+                get_latest_version_from_details(image_details, tx)
+                    .await
+                    .map_or_else(
+                        || Err(anyhow::anyhow!("no versions found")),
+                        |v| Ok(Some(v)),
+                    )
             }
             ParsedOci::Public { path } => {
+                // Can't get this working.
+                // let config = aws_config::defaults(BehaviorVersion::v2025_08_07())
+                //     .region("us-east-1")
+                //     .load()
+                //     .await;
+                // let client = aws_sdk_ecrpublic::Client::new(&config);
+
+                // let tags = client
+                //     .describe_image_tags()
+                //     .repository_name(path)
+                //     .send()
+                //     .await?;
+
+                // let tags_details = tags.image_tag_details();
+
                 let token: AwsToken = reqwest::get("https://public.ecr.aws/token/")
                     .await?
                     .json()
@@ -612,7 +594,15 @@ impl ParsedOci {
                     .json()
                     .await?;
 
-                get_latest_version_from_tags(path, tags, tx).await.pipe(Ok)
+                let tags_details: Vec<_> = tags
+                    .tags
+                    .into_iter()
+                    .map(|tag| ImageTagDetail::builder().image_tag(tag).build())
+                    .collect();
+
+                get_latest_version_from_tags(path, &tags_details, tx)
+                    .await
+                    .pipe(Ok)
             }
         }
     }
@@ -659,12 +649,16 @@ fn parse_version(tag: &str) -> Result<Version> {
 
 /// Get the latest version for the given `OciDetails`.
 async fn get_latest_version_from_details(
-    details: OciDetails,
+    details: &[ImageDetail],
     output: &MultiOutput,
 ) -> Option<Version> {
     let mut versions = vec![];
-    for image in details.image_details {
-        if let Some(tags) = image.image_tags {
+    for image in details {
+        let repository_name = image
+            .repository_name
+            .as_deref()
+            .unwrap_or_else(|| "unknown");
+        if let Some(tags) = &image.image_tags {
             for tag in tags {
                 if is_ignorable_tag(&tag) {
                     continue;
@@ -674,7 +668,7 @@ async fn get_latest_version_from_details(
                     Err(err) => {
                         error!(
                             output,
-                            "Cannot parse version {} {tag}: {err}", image.repository_name
+                            "Cannot parse version {repository_name} {tag}: {err}",
                         )
                         .await;
                     }
@@ -690,17 +684,23 @@ async fn get_latest_version_from_details(
 /// Get the latest version for the given `AwsTags`.
 async fn get_latest_version_from_tags(
     path: &str,
-    tags: AwsTags,
+    tags: &[ImageTagDetail],
     output: &MultiOutput,
 ) -> Option<Version> {
     let mut versions = vec![];
-    for tag in tags.tags {
-        if is_ignorable_tag(&tag) {
+    for tag in tags {
+        let tag_str = match &tag.image_tag {
+            None => continue,
+            Some(str) => str,
+        };
+
+        if is_ignorable_tag(&tag_str) {
             continue;
         }
-        match parse_version(&tag) {
+
+        match parse_version(&tag_str) {
             Ok(version) => versions.push(version),
-            Err(err) => error!(output, "Cannot parse version {path} {tag}: {err}").await,
+            Err(err) => error!(output, "Cannot parse version {path} {tag_str}: {err}").await,
         }
     }
 
