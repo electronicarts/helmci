@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.9](https://github.com/electronicarts/helmci/compare/v2.0.8...v2.0.9) (2025-10-09)
+
+
+### Bug Fixes
+
+* update helm inputs ([a9ca237](https://github.com/electronicarts/helmci/commit/a9ca2370fd9deebeb98956d8e4a64efd210ac16a))
+* update nix flake inputs ([9592812](https://github.com/electronicarts/helmci/commit/9592812c61becd4212d26c6600143dad5e579eed))
+
 ## [2.0.8](https://github.com/electronicarts/helmci/compare/v2.0.7...v2.0.8) (2025-07-07)
 
 
