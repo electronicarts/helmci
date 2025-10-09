@@ -5,7 +5,7 @@
 //! This defines a list of commands that take a message to the output server and an installation to act on.
 use anyhow::Result;
 use aws_config::{BehaviorVersion, Region};
-use aws_sdk_ecr::types::ImageDetail;
+use aws_sdk_ecr::operation::describe_images::DescribeImagesOutput;
 use aws_sdk_ecrpublic::types::ImageTagDetail;
 use semver::Version;
 use serde::Deserialize;
@@ -549,21 +549,29 @@ impl ParsedOci {
                 let client = aws_sdk_ecr::Client::new(&config);
 
                 // Create a DescribeImages request.
-                let images = client
+                let request = client
                     .describe_images()
                     .repository_name(path)
-                    .registry_id(account)
-                    .send()
-                    .await?;
+                    .registry_id(account);
 
-                let image_details = images.image_details();
+                let mut paginator = request.into_paginator().send();
 
-                get_latest_version_from_details(image_details, tx)
-                    .await
-                    .map_or_else(
-                        || Err(anyhow::anyhow!("no versions found")),
-                        |v| Ok(Some(v)),
-                    )
+                let mut maybe_max_version: Option<Version> = None;
+                while let Some(page) = paginator.next().await {
+                    let page = page?;
+                    let version = get_max_version_in_page(&page)?;
+                    let Some(version) = version else {
+                        continue;
+                    };
+                    maybe_max_version = match maybe_max_version {
+                        None => version,
+                        Some(max) if version > max => version,
+                        Some(max) => max,
+                    }
+                    .pipe(Some);
+                }
+
+                Ok(maybe_max_version)
             }
             ParsedOci::Public { path } => {
                 // Can't get this working.
@@ -608,6 +616,31 @@ impl ParsedOci {
     }
 }
 
+fn get_max_version_in_page(page: &DescribeImagesOutput) -> Result<Option<Version>> {
+    let details = page.image_details();
+    let mut maybe_max_version: Option<Version> = None;
+    for image in details {
+        // println!("xxxx {:?} {:?}", image.repository_name, image.image_tags);
+        // let repository_name = image.repository_name.as_deref().unwrap_or("unknown");
+        if let Some(tags) = &image.image_tags {
+            for tag in tags {
+                if is_ignorable_tag(tag) {
+                    continue;
+                }
+                let version = parse_version(tag)?;
+                match maybe_max_version {
+                    None => maybe_max_version = Some(version),
+                    Some(max_version) if version > max_version => {
+                        maybe_max_version = Some(version);
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
+    }
+    Ok(maybe_max_version)
+}
+
 /// Generate the outdated report for an OCI chart reference stored on ECR.
 async fn outdated_oci_chart(
     installation: &Arc<Installation>,
@@ -645,37 +678,6 @@ async fn outdated_oci_chart(
 fn parse_version(tag: &str) -> Result<Version> {
     let tag = tag.strip_prefix('v').unwrap_or(tag);
     Version::parse(tag)?.pipe(Ok)
-}
-
-/// Get the latest version for the given `OciDetails`.
-async fn get_latest_version_from_details(
-    details: &[ImageDetail],
-    output: &MultiOutput,
-) -> Option<Version> {
-    let mut versions = vec![];
-    for image in details {
-        let repository_name = image.repository_name.as_deref().unwrap_or("unknown");
-        if let Some(tags) = &image.image_tags {
-            for tag in tags {
-                if is_ignorable_tag(tag) {
-                    continue;
-                }
-                match parse_version(tag) {
-                    Ok(version) => versions.push(version),
-                    Err(err) => {
-                        error!(
-                            output,
-                            "Cannot parse version {repository_name} {tag}: {err}",
-                        )
-                        .await;
-                    }
-                }
-            }
-        }
-    }
-
-    versions.sort();
-    versions.last().cloned()
 }
 
 /// Get the latest version for the given `AwsTags`.
