@@ -654,16 +654,13 @@ async fn get_latest_version_from_details(
 ) -> Option<Version> {
     let mut versions = vec![];
     for image in details {
-        let repository_name = image
-            .repository_name
-            .as_deref()
-            .unwrap_or_else(|| "unknown");
+        let repository_name = image.repository_name.as_deref().unwrap_or("unknown");
         if let Some(tags) = &image.image_tags {
             for tag in tags {
-                if is_ignorable_tag(&tag) {
+                if is_ignorable_tag(tag) {
                     continue;
                 }
-                match parse_version(&tag) {
+                match parse_version(tag) {
                     Ok(version) => versions.push(version),
                     Err(err) => {
                         error!(
@@ -689,16 +686,15 @@ async fn get_latest_version_from_tags(
 ) -> Option<Version> {
     let mut versions = vec![];
     for tag in tags {
-        let tag_str = match &tag.image_tag {
-            None => continue,
-            Some(str) => str,
+        let Some(tag_str) = &tag.image_tag else {
+            continue;
         };
 
-        if is_ignorable_tag(&tag_str) {
+        if is_ignorable_tag(tag_str) {
             continue;
         }
 
-        match parse_version(&tag_str) {
+        match parse_version(tag_str) {
             Ok(version) => versions.push(version),
             Err(err) => error!(output, "Cannot parse version {path} {tag_str}: {err}").await,
         }
