@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.10](https://github.com/electronicarts/helmci/compare/v2.0.9...v2.0.10) (2025-10-09)
+
+
+### Bug Fixes
+
+* use pagination for outdated OCI query ([b3d4156](https://github.com/electronicarts/helmci/commit/b3d4156e690aead03ce2749fef0a6db67b472825))
+
 ## [2.0.9](https://github.com/electronicarts/helmci/compare/v2.0.8...v2.0.9) (2025-10-09)
 
 
