@@ -563,12 +563,7 @@ impl ParsedOci {
                     let Some(version) = version else {
                         continue;
                     };
-                    maybe_max_version = match maybe_max_version {
-                        None => version,
-                        Some(max) if version > max => version,
-                        Some(max) => max,
-                    }
-                    .pipe(Some);
+                    maybe_max_version = max_version(maybe_max_version, version);
                 }
 
                 Ok(maybe_max_version)
@@ -616,6 +611,15 @@ impl ParsedOci {
     }
 }
 
+fn max_version(maybe_max_version: Option<Version>, version: Version) -> Option<Version> {
+    match maybe_max_version {
+        None => version,
+        Some(max) if version > max => version,
+        Some(max) => max,
+    }
+    .pipe(Some)
+}
+
 fn get_max_version_in_page(page: &DescribeImagesOutput) -> Result<Option<Version>> {
     let details = page.image_details();
     let mut maybe_max_version: Option<Version> = None;
@@ -628,13 +632,7 @@ fn get_max_version_in_page(page: &DescribeImagesOutput) -> Result<Option<Version
                     continue;
                 }
                 let version = parse_version(tag)?;
-                match maybe_max_version {
-                    None => maybe_max_version = Some(version),
-                    Some(max_version) if version > max_version => {
-                        maybe_max_version = Some(version);
-                    }
-                    Some(_) => {}
-                }
+                maybe_max_version = max_version(maybe_max_version, version);
             }
         }
     }
