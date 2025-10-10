@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.11](https://github.com/electronicarts/helmci/compare/v2.0.10...v2.0.11) (2025-10-10)
+
+
+### Bug Fixes
+
+* improve slack outdated formatting ([260af58](https://github.com/electronicarts/helmci/commit/260af58b4e7790c461b2c88509e7083ca63fcfba))
+
 ## [2.0.10](https://github.com/electronicarts/helmci/compare/v2.0.9...v2.0.10) (2025-10-09)
 
 
