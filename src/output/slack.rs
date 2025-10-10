@@ -22,12 +22,7 @@ use std::fmt::Display;
 use std::fmt::Write;
 use std::sync::Arc;
 use std::time::Duration;
-use tabled::Table;
-use tabled::Tabled;
-use tabled::settings::Alignment;
-use tabled::settings::Modify;
-use tabled::settings::Style;
-use tabled::settings::object::Rows;
+use tap::Pipe;
 use tokio;
 use tokio::select;
 use tokio::sync::mpsc;
@@ -82,24 +77,12 @@ impl Display for DisplayableDuration {
     }
 }
 
-#[derive(Tabled)]
 struct JobResult<'a> {
     status: Status,
     cluster: &'a str,
     namespace: &'a str,
     release: &'a str,
     duration: DisplayableDuration,
-}
-
-#[derive(Tabled)]
-struct VersionResult<'a> {
-    cluster: &'a str,
-    namespace: &'a str,
-    release: &'a str,
-    #[tabled(rename = "our")]
-    our_version: String,
-    #[tabled(rename = "upstream")]
-    upstream_version: String,
 }
 
 fn filter_stderr(s: &str) -> String {
@@ -165,29 +148,60 @@ fn to_job_result<'a>(
     }
 }
 
-fn versions_to_string(state: &State) -> String {
-    let data: Vec<VersionResult> = state
+fn versions_to_block(state: &State) -> SlackBlock {
+    let elements: Vec<_> = state
         .jobs
         .iter()
         .filter_map(|installation| {
             if let Some((our_version, upstream_version)) = state.versions.get(&installation.id) {
-                Some(VersionResult {
-                    cluster: &installation.cluster_name,
-                    namespace: &installation.namespace,
-                    release: truncate(&installation.name, 25),
-                    our_version: our_version.clone(),
-                    upstream_version: upstream_version.clone(),
-                })
+                json!({
+                    "type": "rich_text_section",
+                    "elements": [
+                        {
+                            "type": "text",
+                            "text": format!("{}/{}/", installation.cluster_name, installation.namespace)
+                        },
+                        {
+                            "type": "text",
+                            "text": installation.name,
+                            "style": {
+                                "bold": true
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": ": "
+                        },
+                        {
+                            "type": "text",
+                            "text": our_version
+                        },
+                        {
+                            "type": "text",
+                            "text": " → "
+                        },
+                        {
+                            "type": "text",
+                            "text": upstream_version
+                        }
+                    ]
+                }).pipe(Some)
             } else {
                 None
             }
         })
         .collect();
 
-    Table::new(data)
-        .with(Style::markdown())
-        .with(Modify::new(Rows::new(..)).with(Alignment::left()))
-        .to_string()
+    let value = json!({
+        "elements": [
+            {
+                "type": "rich_text_list",
+                "elements": elements,
+                "style": "bullet"
+            }]
+    });
+
+    SlackBlock::RichText(value)
 }
 
 pub fn config_env_var(name: &str) -> Result<String, Error> {
@@ -309,6 +323,8 @@ impl SlackState {
         }
     }
 
+    // This will be called when all jobs are finished, to announce the results to a channel.
+    // It will only announce jobs if configured to do so.
     async fn send_finished(&self, state: &State) {
         #[allow(clippy::match_same_arms)]
         let data = state
@@ -333,7 +349,7 @@ impl SlackState {
         if num_data > 0 {
             let mut blocks: Vec<SlackBlock> = Vec::with_capacity(num_data + 1);
 
-            let title = slack_title(state);
+            let title = slack_title(state, "announcement");
             let text = SlackBlockPlainTextOnly::from(title.clone());
             let heading = SlackHeaderBlock::new(text);
             blocks.push(heading.into());
@@ -376,10 +392,11 @@ impl SlackState {
         }
     }
 
+    // This will be called when a helm command fails, to log the error to slack.
     async fn log_helm_result(&self, state: &State, hr: &crate::helm::HelmResult) {
         let mut blocks: Vec<SlackBlock> = Vec::with_capacity(5);
 
-        let title = slack_title(state);
+        let title = slack_title(state, "error");
         let text = SlackBlockPlainTextOnly::from(title.clone());
         let heading = SlackHeaderBlock::new(text);
         blocks.push(heading.into());
@@ -423,8 +440,9 @@ impl SlackState {
     }
 }
 
+// This gets the regular slack updated content
 fn get_update_content(state: &State) -> SlackMessageContent {
-    let title = slack_title(state);
+    let title = slack_title(state, "update");
     let mut installation_blocks = get_installation_blocks(state);
     let mut outdated_blocks = get_outdated_blocks(state);
 
@@ -437,6 +455,7 @@ fn get_update_content(state: &State) -> SlackMessageContent {
         .with_text(title)
 }
 
+// This is to preformat a block of text, such as stderr or stdout from a helm command.
 fn preformat_block(string: &str) -> SlackBlock {
     let value = json!({
         "elements": [{
@@ -515,7 +534,7 @@ fn get_installation_blocks(state: &State) -> Vec<SlackBlock> {
     }
 
     {
-        let title = "Result";
+        let title = slack_title(state, "Results");
         let text = SlackBlockPlainTextOnly::from(title);
         let heading = SlackHeaderBlock::new(text);
         blocks.push(heading.into());
@@ -546,16 +565,14 @@ fn get_outdated_blocks(state: &State) -> Vec<SlackBlock> {
         vec![]
     } else {
         let title = "Out of date installations";
-        let status = versions_to_string(state);
+        let status = versions_to_block(state);
         let text = SlackBlockPlainTextOnly::from(title);
         let heading = SlackHeaderBlock::new(text);
-        let block = preformat_block(&status);
-        let blocks = slack_blocks![some_into(heading), some_into(block)];
-        blocks
+        vec![heading.into(), status]
     }
 }
 
-fn slack_title(state: &State) -> String {
+fn slack_title(state: &State, title: &str) -> String {
     let task = match state.request.as_deref() {
         Some(Request::Diff { .. }) => "diff",
         Some(Request::Upgrade { .. }) => "upgrade",
@@ -566,7 +583,7 @@ fn slack_title(state: &State) -> String {
         Some(Request::RewriteLocks) => "rewrite locks",
         None => "unknown",
     };
-    format!("helmci - {task}")
+    format!("helmci - {task} - {title}")
 }
 
 fn slack_status_title(state: &State, status: Status) -> String {
