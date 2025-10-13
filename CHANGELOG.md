@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.0.12](https://github.com/electronicarts/helmci/compare/v2.0.11...v2.0.12) (2025-10-13)
+
+
+### Bug Fixes
+
+* add permissions to release please ([137538d](https://github.com/electronicarts/helmci/commit/137538d87810704fef4ea3afa0993579364a417f))
+* improve error handling with invalid OCI version ([d7364d9](https://github.com/electronicarts/helmci/commit/d7364d9c602d2cc62f0ed8e7bc06f2dc9923e458))
+* retry on OCI error ([540dc16](https://github.com/electronicarts/helmci/commit/540dc167924e85ad5e8b843ed69c4faa578d31df))
+
+
+### Reverts
+
+* use google-github-actions/release-please-action@v4 ([beecb24](https://github.com/electronicarts/helmci/commit/beecb245aafab16cfd3cfd7e9b77c11577189bac))
+
 ## [2.0.11](https://github.com/electronicarts/helmci/compare/v2.0.10...v2.0.11) (2025-10-10)
 
 
