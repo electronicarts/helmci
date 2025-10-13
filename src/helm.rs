@@ -700,8 +700,7 @@ async fn get_latest_version_from_tags(
         }
     }
 
-    versions.sort();
-    versions.last().cloned()
+    versions.into_iter().max()
 }
 
 // Check if version is non semver compliant or legacy and should be ignored
