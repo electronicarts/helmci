@@ -24,7 +24,7 @@ use crate::{
     Update,
     command::{CommandLine, CommandResult, CommandSuccess},
     config::{AnnouncePolicy, ChartReference, ReleaseReference, ValuesFile, ValuesFormat},
-    output::{Message, MultiOutput, debug, error, info},
+    output::{Message, MultiOutput, debug, error, info, warning},
     repos::{charts::Chart, helm},
 };
 
@@ -696,7 +696,7 @@ async fn get_latest_version_from_tags(
 
         match parse_version(tag_str) {
             Ok(version) => versions.push(version),
-            Err(err) => error!(output, "Cannot parse version {path} {tag_str}: {err}").await,
+            Err(err) => warning!(output, "Cannot parse version {path} {tag_str}: {err}").await,
         }
     }
 
@@ -706,7 +706,8 @@ async fn get_latest_version_from_tags(
 
 // Check if version is non semver compliant or legacy and should be ignored
 fn is_ignorable_tag(tag: &str) -> bool {
-    tag.starts_with("v0-")
+    tag == "artifacthub.io"
+        || tag.starts_with("v0-")
         || tag.starts_with("sha256-")
         || tag.starts_with("0.0.0_")
         || !tag.contains('.')
