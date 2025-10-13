@@ -14,9 +14,6 @@ jobs:
   release_please:
     name: Release Please
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
     if: github.repository == 'electronicarts/helmci'
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
