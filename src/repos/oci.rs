@@ -140,6 +140,31 @@ impl Repo {
         )
     }
 
+    pub async fn retry_get_by_reference(
+        &self,
+        reference: &Reference,
+        cache: &Cache,
+        name: &str,
+        version: &str,
+        expected_size: Option<u64>,
+    ) -> Result<Chart, Error> {
+        const RETRIES: u32 = 3;
+        let mut attempt = 0;
+
+        loop {
+            match self
+                .get_by_reference(reference, cache, name, version, expected_size)
+                .await
+            {
+                Ok(chart) => return Ok(chart),
+                Err(err) if is_retriable_error(&err) && attempt < RETRIES => {
+                    attempt += 1;
+                }
+                Err(err) => return Err(err),
+            }
+        }
+    }
+
     pub async fn get_by_version(
         &self,
         name: &str,
@@ -149,7 +174,7 @@ impl Repo {
         let path = format!("{}/{}", self.path, name);
         let reference: Reference =
             Reference::with_tag(self.host.clone(), path, version.to_string());
-        self.get_by_reference(&reference, cache, name, version, None)
+        self.retry_get_by_reference(&reference, cache, name, version, None)
             .await
     }
 
@@ -164,7 +189,7 @@ impl Repo {
 
         let reference: Reference =
             Reference::with_digest(self.host.clone(), path, digest.to_string());
-        self.get_by_reference(
+        self.retry_get_by_reference(
             &reference,
             cache,
             &meta.name,
@@ -173,6 +198,10 @@ impl Repo {
         )
         .await
     }
+}
+
+const fn is_retriable_error(err: &Error) -> bool {
+    matches!(err, Error::OciIo(_, _) | Error::OciDistribution(_, _))
 }
 
 fn file_to_chart(
