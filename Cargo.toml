@@ -27,7 +27,7 @@ futures = "0.3.31"
 hyper-util = "0.1.17"
 tap = "1.0.1"
 reqwest = { version = "=0.12.24", default-features = false, features = ["json", "rustls-tls"] }
-nondestructive = "0.0.26"
+nondestructive = "0.0.27"
 rustls = "0.23.32"
 thiserror = "2.0.17"
 sha256 = "1.6.0"
