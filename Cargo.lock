@@ -2521,9 +2521,9 @@ dependencies = [
 
 [[package]]
 name = "nondestructive"
-version = "0.0.26"
+version = "0.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b7431b02828e98a4366e3769b5e0dcfd922c51108c60c349d6acbb199f3d994"
+checksum = "640e12526473a1260c2aba20f9c474fb7355b45b0a86fa70e6a965b8061ff94e"
 dependencies = [
  "bstr",
  "itoa",
@@ -4029,7 +4029,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97fee6b57c6a41524a810daee9286c02d7752c4253064d0b05472833a438f675"
 dependencies = [
  "cfg-if",
- "rand 0.8.5",
  "static_assertions",
 ]
 
