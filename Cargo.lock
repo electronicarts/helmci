@@ -573,7 +573,7 @@ dependencies = [
  "hyper-util",
  "pin-project-lite",
  "rustls 0.21.12",
- "rustls 0.23.32",
+ "rustls 0.23.33",
  "rustls-native-certs 0.8.1",
  "rustls-pki-types",
  "tokio",
@@ -1712,7 +1712,7 @@ dependencies = [
  "oci-client",
  "ratatui",
  "reqwest",
- "rustls 0.23.32",
+ "rustls 0.23.33",
  "semver",
  "serde",
  "serde_json",
@@ -1903,7 +1903,7 @@ dependencies = [
  "hyper 1.7.0",
  "hyper-util",
  "log",
- "rustls 0.23.32",
+ "rustls 0.23.33",
  "rustls-native-certs 0.8.1",
  "rustls-pki-types",
  "tokio",
@@ -2748,7 +2748,7 @@ dependencies = [
  "quinn-proto",
  "quinn-udp",
  "rustc-hash 1.1.0",
- "rustls 0.23.32",
+ "rustls 0.23.33",
  "thiserror 1.0.56",
  "tokio",
  "tracing",
@@ -2764,7 +2764,7 @@ dependencies = [
  "rand 0.8.5",
  "ring",
  "rustc-hash 1.1.0",
- "rustls 0.23.32",
+ "rustls 0.23.33",
  "slab",
  "thiserror 1.0.56",
  "tinyvec",
@@ -2949,7 +2949,7 @@ dependencies = [
  "percent-encoding",
  "pin-project-lite",
  "quinn",
- "rustls 0.23.32",
+ "rustls 0.23.33",
  "rustls-pki-types",
  "serde",
  "serde_json",
@@ -3055,9 +3055,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.32"
+version = "0.23.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd3c25631629d034ce7cd9940adc9d45762d46de2b0f57193c4443b92c6d4d40"
+checksum = "751e04a496ca00bb97a5e043158d23d66b5aabf2e1d5aa2a0aaebb1aafe6f82c"
 dependencies = [
  "aws-lc-rs",
  "log",
@@ -3802,7 +3802,7 @@ version = "0.26.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1729aa945f29d91ba541258c8df89027d5792d85a8841fb65e8bf0f4ede4ef61"
 dependencies = [
- "rustls 0.23.32",
+ "rustls 0.23.33",
  "tokio",
 ]
 
@@ -3825,7 +3825,7 @@ checksum = "489a59b6730eda1b0171fcfda8b121f4bee2b35cba8645ca35c5f7ba3eb736c1"
 dependencies = [
  "futures-util",
  "log",
- "rustls 0.23.32",
+ "rustls 0.23.33",
  "rustls-native-certs 0.8.1",
  "rustls-pki-types",
  "tokio",
@@ -3941,7 +3941,7 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.9.0",
- "rustls 0.23.32",
+ "rustls 0.23.33",
  "rustls-pki-types",
  "sha1",
  "thiserror 2.0.17",
