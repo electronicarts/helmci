@@ -187,8 +187,7 @@ impl Repo {
             return Err(Error::NotAnOciImage);
         };
 
-        let reference: Reference =
-            Reference::with_digest(self.host.clone(), path, digest.to_string());
+        let reference: Reference = Reference::with_digest(self.host.clone(), path, digest.clone());
         self.retry_get_by_reference(
             &reference,
             cache,

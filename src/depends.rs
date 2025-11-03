@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn test_get_depends_order_good() {
-        let todo = vec![
+        let todo = [
             Installation {
                 name: "ingress-nginx-ext".to_string(),
                 config_file: "config.yaml".into(),
@@ -188,7 +188,7 @@ mod tests {
 
     #[test]
     fn test_get_depends_order_multiple_depends() {
-        let todo = vec![
+        let todo = [
             Installation {
                 name: "ingress-nginx-ext".to_string(),
                 config_file: "config.yaml".into(),
@@ -254,7 +254,7 @@ mod tests {
     #[test]
     fn test_get_depends_order_loop() {
         // test dependancy loop
-        let todo = vec![
+        let todo = [
             Installation {
                 name: "ingress-nginx-ext".to_string(),
                 config_file: "config.yaml".into(),
@@ -317,7 +317,7 @@ mod tests {
     #[test]
     fn test_get_depends_itself() {
         // test item depends on itself
-        let todo = vec![Installation {
+        let todo = [Installation {
             name: "ingress-nginx-ext".to_string(),
             config_file: "config.yaml".into(),
             lock_file: "lock.json".into(),
@@ -352,7 +352,7 @@ mod tests {
     #[test]
     fn test_get_depends_non_existant() {
         // test item depends on non-existant install
-        let todo = vec![Installation {
+        let todo = [Installation {
             name: "ingress-nginx-ext".to_string(),
             config_file: "config.yaml".into(),
             lock_file: "lock.json".into(),
