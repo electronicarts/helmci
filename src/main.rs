@@ -118,14 +118,14 @@ async fn run_job(
             helm::diff(installation, tx).await?;
             Ok(JobSuccess::Completed)
         }
-        Request::Test { .. } => {
+        Request::Test { artifacts, .. } => {
             helm::outdated(installation, tx).await?;
             helm::lint(installation, tx).await?;
-            helm::template(installation, tx).await?;
+            helm::template(installation, artifacts.as_ref(), tx).await?;
             Ok(JobSuccess::Completed)
         }
-        Request::Template { .. } => {
-            helm::template(installation, tx).await?;
+        Request::Template { artifacts, .. } => {
+            helm::template(installation, artifacts.as_ref(), tx).await?;
             Ok(JobSuccess::Completed)
         }
         Request::Outdated { .. } => {
@@ -206,10 +206,16 @@ enum Request {
     Diff {},
 
     /// Test releases.
-    Test {},
+    Test {
+        #[clap(long, short = 'a')]
+        artifacts: Option<PathBuf>,
+    },
 
     /// Generate template of releases.
-    Template {},
+    Template {
+        #[clap(long, short = 'a')]
+        artifacts: Option<PathBuf>,
+    },
 
     /// Generate outdated report of releases.
     Outdated {},

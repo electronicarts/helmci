@@ -242,7 +242,11 @@ fn get_args_from_chart(chart: &Chart) -> (OsString, Vec<OsString>) {
 }
 
 /// Run the helm template command.
-pub async fn template(downloaded: &DownloadedInstallation, tx: &MultiOutput) -> Result<()> {
+pub async fn template(
+    downloaded: &DownloadedInstallation,
+    artifacts_path: Option<&PathBuf>,
+    tx: &MultiOutput,
+) -> Result<()> {
     let installation = &downloaded.installation;
     let Some(chart) = &downloaded.chart else {
         return Err(anyhow::anyhow!("chart not downloaded"));
@@ -267,6 +271,18 @@ pub async fn template(downloaded: &DownloadedInstallation, tx: &MultiOutput) -> 
     let command_line = CommandLine::new(helm_path(), args);
     let result = command_line.run().await;
     let has_errors = result.is_err();
+
+    if let Some(artifacts_path) = artifacts_path
+        && let Ok(success) = &result
+    {
+        let artifact_dir = artifacts_path
+            .join(&installation.env_name)
+            .join(&installation.cluster_name);
+        std::fs::create_dir_all(&artifact_dir)?;
+        let artifact_path = artifact_dir.join(format!("{}.yaml", installation.name));
+        std::fs::write(artifact_path, &success.stdout)?;
+    }
+
     let i_result = HelmResult::from_result(installation, result, Command::Template);
     let i_result = Arc::new(i_result);
     tx.send(Message::InstallationResult(i_result)).await;
