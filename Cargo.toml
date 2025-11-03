@@ -37,7 +37,7 @@ async-tar = "0.5.1"
 async-std = "1.13.2"
 async-compression = { version = "0.4.32", features = ["futures-io", "gzip"] }
 async-channel = "2.5.0"
-aws-config = "1.8.8"
+aws-config = "1.8.10"
 aws-sdk-ecr = "1.97.0"
 aws-sdk-ecrpublic = "1.91.0"
 # aws-credential-types = "1.2.8"
