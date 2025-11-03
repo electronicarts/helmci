@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/electronicarts/helmci/compare/v2.0.12...v2.1.0) (2025-11-03)
+
+
+### Features
+
+* add artifact parameter to template and test ([0b0aead](https://github.com/electronicarts/helmci/commit/0b0aeadf7555882317da4f2d6bf84844c877502c))
+
 ## [2.0.12](https://github.com/electronicarts/helmci/compare/v2.0.11...v2.0.12) (2025-10-13)
 
 
