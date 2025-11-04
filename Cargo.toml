@@ -28,7 +28,7 @@ hyper-util = "0.1.17"
 tap = "1.0.1"
 reqwest = { version = "=0.12.24", default-features = false, features = ["json", "rustls-tls"] }
 nondestructive = "0.0.28"
-rustls = "0.23.34"
+rustls = "0.23.35"
 thiserror = "2.0.17"
 sha256 = "1.6.0"
 docker_credential = "1.3.2"
