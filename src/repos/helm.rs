@@ -132,7 +132,7 @@ pub struct Repo {
 impl Repo {
     pub async fn download_index(url: &Url) -> Result<Self, Error> {
         let url = append_url(url, "index.yaml")?;
-        let response = reqwest::get(url).await?;
+        let response = reqwest::get(url).await?.error_for_status()?;
         let text = response.text().await?;
         Ok(serde_yml::from_str::<Repo>(&text)?)
     }
