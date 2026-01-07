@@ -1,6 +1,6 @@
 [package]
 name = "helmci"
-version = "2.1.0"
+version = "2.1.1"
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -10,7 +10,7 @@ anyhow = "1.0"
 clap = { version = "4.5.54", features = ["derive"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_yml = "0.0.12"
-serde_json = "1.0.149"
+serde_json = "1.0.148"
 log = { version = "0.4.29", features = ["std"] }
 ratatui = "0.29.0"
 crossterm = { version = "0.29.0", features = ["event-stream"] }
@@ -28,7 +28,7 @@ hyper-util = "0.1.19"
 tap = "1.0.1"
 reqwest = { version = "=0.12.28", default-features = false, features = ["json", "rustls-tls"] }
 nondestructive = "0.0.28"
-rustls = "0.23.36"
+rustls = "0.23.35"
 thiserror = "2.0.17"
 sha256 = "1.6.0"
 docker_credential = "1.3.2"
