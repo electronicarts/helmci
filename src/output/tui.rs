@@ -71,7 +71,7 @@ impl<T> StatefulList<T> {
         StatefulList { state, items }
     }
 
-    fn next(&mut self) {
+    const fn next(&mut self) {
         let i = match self.state.selected() {
             _ if self.items.is_empty() => None,
             Some(i) => {
@@ -86,7 +86,7 @@ impl<T> StatefulList<T> {
         self.state.select(i);
     }
 
-    fn previous(&mut self) {
+    const fn previous(&mut self) {
         let i = match self.state.selected() {
             _ if self.items.is_empty() => None,
             Some(i) => {
@@ -101,7 +101,7 @@ impl<T> StatefulList<T> {
         self.state.select(i);
     }
 
-    fn deselect(&mut self) {
+    const fn deselect(&mut self) {
         self.state.select(None);
     }
 
