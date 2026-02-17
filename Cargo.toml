@@ -38,7 +38,7 @@ async-std = "1.13.2"
 async-compression = { version = "0.4.39", features = ["futures-io", "gzip"] }
 async-channel = "2.5.0"
 aws-config = "1.8.14"
-aws-sdk-ecr = "1.107.0"
+aws-sdk-ecr = "1.107.1"
 aws-sdk-ecrpublic = "1.97.0"
 # aws-credential-types = "1.2.8"
 aws-credential-types = { version = "1.2.12", features = ["hardcoded-credentials"] } # Enable the feature here
