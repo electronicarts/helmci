@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.1](https://github.com/electronicarts/helmci/compare/v2.1.0...v2.1.1) (2026-02-20)
+
+
+### Bug Fixes
+
+* check for error status in HTTP get helm index ([302f82b](https://github.com/electronicarts/helmci/commit/302f82b52e2dcdf6bc6ce59fe917336d89c75ab0))
+
 ## [2.1.0](https://github.com/electronicarts/helmci/compare/v2.0.12...v2.1.0) (2025-11-03)
 
 
