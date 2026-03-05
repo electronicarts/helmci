@@ -318,7 +318,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7b7b6141e96a8c160799cc2d5adecd5cbbe5054cb8c7c4af53da0f83bb7ad256"
 dependencies = [
  "aws-lc-sys",
- "untrusted 0.7.1",
  "zeroize",
 ]
 
@@ -2256,7 +2255,6 @@ version = "10.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0529410abe238729a60b108898784df8984c87f6054c9c4fcacc47e4803c1ce1"
 dependencies = [
- "aws-lc-rs",
  "base64 0.22.1",
  "getrandom 0.2.16",
  "js-sys",
@@ -2614,9 +2612,9 @@ dependencies = [
 
 [[package]]
 name = "oci-client"
-version = "0.16.0"
+version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "407c69ed8de3ceeef4662d8fc2d830769b66f0b31ac23fdc9e9f59ac5f995f62"
+checksum = "1b7f8deaffcd3b0e3baf93dddcab3d18b91d46dc37d38a8b170089b234de5bb3"
 dependencies = [
  "bytes",
  "chrono",
@@ -2640,9 +2638,9 @@ dependencies = [
 
 [[package]]
 name = "oci-spec"
-version = "0.8.1"
+version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57e9beda9d92fac7bf4904c34c83340ef1024159faee67179a04e0277523da33"
+checksum = "e8445a2631507cec628a15fdd6154b54a3ab3f20ed4fe9d73a3b8b7a4e1ba03a"
 dependencies = [
  "const_format",
  "derive_builder",
@@ -3257,7 +3255,7 @@ dependencies = [
  "cfg-if",
  "getrandom 0.2.16",
  "libc",
- "untrusted 0.9.0",
+ "untrusted",
  "windows-sys 0.52.0",
 ]
 
@@ -3397,7 +3395,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b6275d1ee7a1cd780b64aca7726599a1dbc893b1e64144529e55c3c2f745765"
 dependencies = [
  "ring",
- "untrusted 0.9.0",
+ "untrusted",
 ]
 
 [[package]]
@@ -3409,7 +3407,7 @@ dependencies = [
  "aws-lc-rs",
  "ring",
  "rustls-pki-types",
- "untrusted 0.9.0",
+ "untrusted",
 ]
 
 [[package]]
@@ -3482,7 +3480,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da046153aa2352493d6cb7da4b6e5c0c057d8a1d0a9aa8560baffdd945acd414"
 dependencies = [
  "ring",
- "untrusted 0.9.0",
+ "untrusted",
 ]
 
 [[package]]
@@ -4369,12 +4367,6 @@ name = "unicode-xid"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
-
-[[package]]
-name = "untrusted"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
 
 [[package]]
 name = "untrusted"
