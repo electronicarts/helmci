@@ -170,7 +170,7 @@ fn rich_text_bold(text: &str) -> SlackRichTextInlineElement {
     })
 }
 
-fn rich_text_section(elements: Vec<SlackRichTextInlineElement>) -> SlackRichTextElement {
+const fn rich_text_section(elements: Vec<SlackRichTextInlineElement>) -> SlackRichTextElement {
     SlackRichTextElement::Section(SlackRichTextSection { elements })
 }
 
