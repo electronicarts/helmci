@@ -14,7 +14,6 @@ use async_trait::async_trait;
 use futures::Future;
 use hyper_rustls::HttpsConnector;
 use hyper_util::client::legacy::connect::HttpConnector;
-use serde_json::json;
 use slack_morphism::errors::SlackClientError;
 use slack_morphism::prelude::*;
 use std::collections::HashMap;
@@ -148,60 +147,74 @@ fn to_job_result<'a>(
     }
 }
 
+fn rich_text(text: &str) -> SlackRichTextInlineElement {
+    SlackRichTextInlineElement::Text(SlackRichTextText {
+        text: text.to_string(),
+        style: None,
+    })
+}
+
+fn rich_text_bold(text: &str) -> SlackRichTextInlineElement {
+    SlackRichTextInlineElement::Text(SlackRichTextText {
+        text: text.to_string(),
+        style: Some(SlackRichTextStyle {
+            bold: Some(true),
+            italic: None,
+            strike: None,
+            code: None,
+            underline: None,
+            highlight: None,
+            client_highlight: None,
+            unlink: None,
+        }),
+    })
+}
+
+fn rich_text_section(elements: Vec<SlackRichTextInlineElement>) -> SlackRichTextElement {
+    SlackRichTextElement::Section(SlackRichTextSection { elements })
+}
+
+fn rich_text_block(elements: Vec<SlackRichTextElement>) -> SlackBlock {
+    SlackRichTextBlock {
+        block_id: None,
+        elements,
+    }
+    .into()
+}
+
 fn versions_to_block(state: &State) -> SlackBlock {
-    let elements: Vec<_> = state
+    let elements: Vec<SlackRichTextSection> = state
         .jobs
         .iter()
         .filter_map(|installation| {
             if let Some((our_version, upstream_version)) = state.versions.get(&installation.id) {
-                json!({
-                    "type": "rich_text_section",
-                    "elements": [
-                        {
-                            "type": "text",
-                            "text": format!("{}/{}/", installation.cluster_name, installation.namespace)
-                        },
-                        {
-                            "type": "text",
-                            "text": installation.name,
-                            "style": {
-                                "bold": true
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": ": "
-                        },
-                        {
-                            "type": "text",
-                            "text": our_version
-                        },
-                        {
-                            "type": "text",
-                            "text": " → "
-                        },
-                        {
-                            "type": "text",
-                            "text": upstream_version
-                        }
-                    ]
-                }).pipe(Some)
+                SlackRichTextSection {
+                    elements: vec![
+                        rich_text(&format!(
+                            "{}/{}/",
+                            installation.cluster_name, installation.namespace
+                        )),
+                        rich_text_bold(&installation.name),
+                        rich_text(": "),
+                        rich_text(our_version),
+                        rich_text(" → "),
+                        rich_text(upstream_version),
+                    ],
+                }
+                .pipe(Some)
             } else {
                 None
             }
         })
         .collect();
 
-    let value = json!({
-        "elements": [
-            {
-                "type": "rich_text_list",
-                "elements": elements,
-                "style": "bullet"
-            }]
-    });
-
-    SlackBlock::RichText(value)
+    rich_text_block(vec![SlackRichTextElement::List(SlackRichTextList {
+        style: SlackRichTextListStyle::Bullet,
+        elements,
+        indent: None,
+        offset: None,
+        border: None,
+    })])
 }
 
 pub fn config_env_var(name: &str) -> Result<String, Error> {
@@ -457,16 +470,13 @@ fn get_update_content(state: &State) -> SlackMessageContent {
 
 // This is to preformat a block of text, such as stderr or stdout from a helm command.
 fn preformat_block(string: &str) -> SlackBlock {
-    let value = json!({
-        "elements": [{
-            "type": "rich_text_preformatted",
-            "elements": [{
-                "type": "text",
-                "text": string
-            }]
-        }]
-    });
-    SlackBlock::RichText(value)
+    rich_text_block(vec![SlackRichTextElement::Preformatted(
+        SlackRichTextPreformatted {
+            elements: vec![rich_text(string)],
+            border: None,
+            language: None,
+        },
+    )])
 }
 
 fn get_installation_blocks(state: &State) -> Vec<SlackBlock> {
@@ -493,41 +503,29 @@ fn get_installation_blocks(state: &State) -> Vec<SlackBlock> {
             }
 
             {
-                let elements: Vec<_> = status_vec
+                let sections: Vec<SlackRichTextSection> = status_vec
                     .iter()
                     .map(|x| {
                         let mut elements = vec![
-                            json!({
-                              "type": "text",
-                              "text": format!("{}/{}/", x.cluster, x.namespace)
-                            }),
-                            json!({
-                              "type": "text",
-                              "text": x.release,
-                              "style": {
-                                  "bold": true
-                              }
-                            }),
+                            rich_text(&format!("{}/{}/", x.cluster, x.namespace)),
+                            rich_text_bold(x.release),
                         ];
 
                         if x.duration.is_some() {
-                            elements.push(json!({
-                                "type": "text",
-                                "text": format!(" ({})", x.duration),
-                            }));
+                            elements.push(rich_text(&format!(" ({})", x.duration)));
                         }
 
-                        json!({
-                            "type": "rich_text_section",
-                            "elements": elements
-                        })
+                        SlackRichTextSection { elements }
                     })
                     .collect();
 
-                let value = json!({
-                    "elements": elements
-                });
-                let block = SlackBlock::RichText(value);
+                let block = rich_text_block(vec![SlackRichTextElement::List(SlackRichTextList {
+                    style: SlackRichTextListStyle::Bullet,
+                    elements: sections,
+                    indent: None,
+                    offset: None,
+                    border: None,
+                })]);
                 blocks.push(block);
             }
         }
@@ -541,19 +539,10 @@ fn get_installation_blocks(state: &State) -> Vec<SlackBlock> {
     }
 
     {
-        let value = json!({
-            "elements": [
-                {
-                    "type": "rich_text_section",
-                    "elements": [
-                        {
-                          "type": "text",
-                          "text": format!("{} {}", totals.0, totals.1)
-                        }
-                    ]
-                }]
-        });
-        let block = SlackBlock::RichText(value);
+        let block = rich_text_block(vec![rich_text_section(vec![rich_text(&format!(
+            "{} {}",
+            totals.0, totals.1
+        ))])]);
         blocks.push(block);
     }
 
