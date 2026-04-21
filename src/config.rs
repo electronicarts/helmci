@@ -102,12 +102,12 @@ impl std::fmt::Display for ChartReference {
                 repo_url,
                 chart_name,
                 chart_version,
-            } => write!(f, "Helm: {repo_url}/{chart_name}:{chart_version}",),
+            } => write!(f, "Helm: {repo_url}/{chart_name}:{chart_version}"),
             ChartReference::Oci {
                 repo_url,
                 chart_name,
                 chart_version,
-            } => write!(f, "Oci: {repo_url}/{chart_name}:{chart_version}",),
+            } => write!(f, "Oci: {repo_url}/{chart_name}:{chart_version}"),
             ChartReference::Local { path } => write!(f, "Local: {path}", path = path.display()),
         }
     }
