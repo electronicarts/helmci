@@ -31,7 +31,7 @@ nondestructive = "0.0.28"
 rustls = "0.23.40"
 thiserror = "2.0.18"
 sha256 = "1.6.0"
-docker_credential = "1.3.2"
+docker_credential = "1.3.3"
 oci-client = { version  = "0.16.1", default-features = false, features = [ "rustls-tls"] }
 async-tar = "0.6.0"
 async-std = { version = "1.13.2", features = ["unstable"] }
