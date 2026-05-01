@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.1.1](https://github.com/electronicarts/helmci/compare/v2.1.0...v2.1.1) (2026-05-01)
+
+
+### Bug Fixes
+
+* check for error status in HTTP get helm index ([302f82b](https://github.com/electronicarts/helmci/commit/302f82b52e2dcdf6bc6ce59fe917336d89c75ab0))
+* use SlackRichTextBlock typed structs instead of serde_json::Value for RichText blocks ([0e41917](https://github.com/electronicarts/helmci/commit/0e41917f3c0f04fcb33b889f656c83bd1d12a016))
+* **windows:** attempt to fix build errors ([22ec8db](https://github.com/electronicarts/helmci/commit/22ec8db55638ad967f3364066fe549d01e8abb25))
+
 ## [2.1.0](https://github.com/electronicarts/helmci/compare/v2.0.12...v2.1.0) (2025-11-03)
 
 
