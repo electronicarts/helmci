@@ -1,0 +1,6 @@
+[[PackageOverrides]]
+name = "rustls-webpki"
+version = "0.101.7"
+ecosystem = "crates.io"
+vulnerability.ignore = true
+reason = "Transitive dependency pinned by AWS SDK (aws-smithy-http-client -> hyper-rustls -> rustls 0.21). Not fixable from this crate."
