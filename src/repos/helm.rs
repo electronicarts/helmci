@@ -17,7 +17,7 @@ pub enum Error {
     #[error("Failed to download: {0}")]
     Download(#[from] reqwest::Error),
     #[error("Failed to parse index: {0}")]
-    Parse(#[from] serde_yml::Error),
+    Parse(#[from] serde_yaml_ng::Error),
     #[error("Failed to append url: {0}")]
     UrlJoin(#[from] AppendUrlError),
     #[error("File error: {0}")]
@@ -134,7 +134,7 @@ impl Repo {
         let url = append_url(url, "index.yaml")?;
         let response = reqwest::get(url).await?.error_for_status()?;
         let text = response.text().await?;
-        Ok(serde_yml::from_str::<Repo>(&text)?)
+        Ok(serde_yaml_ng::from_str::<Repo>(&text)?)
     }
 
     fn internal_get_by_version(&self, name: &str, version: &str) -> Option<&Entry> {
@@ -238,7 +238,7 @@ entries:
       version: 1.1.0
 generated: 2016-10-06T16:23:20.499029981-06:00
 ";
-        let text = serde_yml::from_str::<Repo>(index).unwrap();
+        let text = serde_yaml_ng::from_str::<Repo>(index).unwrap();
         assert_eq!(text.api_version, "v1");
         assert_eq!(text.entries.len(), 2);
         assert_eq!(

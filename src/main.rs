@@ -704,7 +704,7 @@ fn get_new_chart_reference(
         Request::Update { .. } => {
             // Reload the release file because it may have changed
 
-            let new_chart_reference = serde_yml::from_str::<config::ReleaseConfig>(
+            let new_chart_reference = serde_yaml_ng::from_str::<config::ReleaseConfig>(
                 &std::fs::read_to_string(&installation.config_file)?,
             )
             .context("Failed to parse config file")?

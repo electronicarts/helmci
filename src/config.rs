@@ -175,7 +175,7 @@ impl Env {
 
         let file: String = std::fs::read_to_string(&config_file)
             .with_context(|| format!("Reading file {}", config_file.display()))?;
-        let config: EnvConfig = serde_yml::from_str(&file)
+        let config: EnvConfig = serde_yaml_ng::from_str(&file)
             .with_context(|| format!("Parsing file {}", config_file.display()))?;
 
         Ok(Env {
@@ -228,7 +228,7 @@ impl Env {
 
         let file: String = std::fs::read_to_string(&config_file)
             .with_context(|| format!("Reading file {}", config_file.display()))?;
-        let config: ClusterConfig = serde_yml::from_str(&file)
+        let config: ClusterConfig = serde_yaml_ng::from_str(&file)
             .with_context(|| format!("Parsing file {}", config_file.display()))?;
 
         Ok(Cluster {
@@ -266,7 +266,7 @@ impl Cluster {
 
         let file: String = std::fs::read_to_string(&config_file)
             .with_context(|| format!("Reading file {}", config_file.display()))?;
-        let config: ReleaseConfig = serde_yml::from_str(&file)
+        let config: ReleaseConfig = serde_yaml_ng::from_str(&file)
             .with_context(|| format!("Parsing file {}", config_file.display()))?;
 
         Ok(Release {
@@ -288,7 +288,7 @@ mod tests {
         #![allow(clippy::unwrap_used)]
 
         let str = "'Hello/World'".to_string();
-        let result: ReleaseReference = serde_yml::from_str(&str).unwrap();
+        let result: ReleaseReference = serde_yaml_ng::from_str(&str).unwrap();
         assert_eq!(result.namespace, "Hello");
         assert_eq!(result.name, "World");
     }
@@ -301,7 +301,7 @@ mod tests {
             namespace: "Hello".to_string(),
             name: "World".to_string(),
         };
-        let result = serde_yml::to_string(&r).unwrap();
+        let result = serde_yaml_ng::to_string(&r).unwrap();
         assert_eq!(result, "Hello/World\n");
     }
 }

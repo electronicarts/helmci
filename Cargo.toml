@@ -9,7 +9,7 @@ edition = "2024"
 anyhow = "1.0"
 clap = { version = "4.5.60", features = ["derive"] }
 serde = { version = "1.0.228", features = ["derive"] }
-serde_yml = "0.0.12"
+serde_yaml_ng = "0.10.0"
 serde_json = "1.0.149"
 log = { version = "0.4.29", features = ["std"] }
 ratatui = "0.30.0"

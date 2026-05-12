@@ -18,7 +18,7 @@ pub enum Error {
     #[error("Failed to download: {0}")]
     Download(#[from] reqwest::Error),
     #[error("Failed to parse index: {0}")]
-    Parse(#[from] serde_yml::Error),
+    Parse(#[from] serde_yaml_ng::Error),
     #[error("File error: {0}")]
     File(PathBuf, std::io::Error),
     #[error("Cache error: {0}")]
@@ -136,14 +136,14 @@ impl Entry {
 pub async fn get_by_path(path: &Path, cache: &Cache) -> Result<Chart, Error> {
     let config_path = path.join("Chart.yaml");
     let file = File::open(config_path.clone()).map_err(|e| Error::File(config_path, e))?;
-    let entry: Entry = serde_yml::from_reader(file)?;
+    let entry: Entry = serde_yaml_ng::from_reader(file)?;
     entry.download_chart(path, cache, None, None).await
 }
 
 pub async fn get_by_meta(path: &Path, cache: &Cache, meta: &Meta) -> Result<Chart, Error> {
     let config_path = path.join("Chart.yaml");
     let file = File::open(config_path.clone()).map_err(|e| Error::File(config_path, e))?;
-    let entry: Entry = serde_yml::from_reader(file)?;
+    let entry: Entry = serde_yaml_ng::from_reader(file)?;
     entry
         .download_chart(path, cache, Some(meta.size), Some(meta.sha256_hash.clone()))
         .await
