@@ -166,9 +166,10 @@ jobs:
         run: for file in helmci-*/helmci-*; do openssl dgst -sha256 -r "$file" | awk '{print $1}' > "${file}.sha256"; done
 
       - name: Setup | Publish Release
-        run: gh release edit ${{ needs.release_please.outputs.tag_name }} --draft=false --repo=electronicarts/helmci
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.release_please.outputs.tag_name }}
+        run: gh release edit "$TAG_NAME" --draft=false --repo=electronicarts/helmci
 
       - name: Build | Add Artifacts to Release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
