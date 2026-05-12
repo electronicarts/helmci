@@ -89,12 +89,10 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Setup | Rust
-        uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
         with:
           toolchain: stable
-          override: true
-          profile: minimal
-          target: ${{ matrix.target }}
+          targets: ${{ matrix.target }}
 
       - name: Setup | Install cargo-wix [Windows]
         continue-on-error: true
@@ -105,20 +103,23 @@ jobs:
           # cargo-wix does not require static crt
           RUSTFLAGS: ""
 
+      - name: Setup | Install cross [Linux]
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo install cross --locked
+
       - name: Build | Build
-        uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
-        with:
-          command: build
-          args: --release --locked --target ${{ matrix.target }}
-          use-cross: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          if [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            cross build --release --locked --target ${{ matrix.target }}
+          else
+            cargo build --release --locked --target ${{ matrix.target }}
+          fi
+        shell: bash
 
       - name: Build | Installer [Windows]
         continue-on-error: true
         if: matrix.os == 'windows-latest' && matrix.target != 'aarch64-pc-windows-msvc'
-        uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
-        with:
-          command: wix
-          args: -v --no-build --nocapture -I install/windows/main.wxs --target ${{ matrix.target }} --output target/wix/helmci-${{ matrix.target }}.msi
+        run: cargo wix -v --no-build --nocapture -I install/windows/main.wxs --target ${{ matrix.target }} --output target/wix/helmci-${{ matrix.target }}.msi
 
       - name: Post Build | Prepare artifacts [Windows]
         if: matrix.os == 'windows-latest'
