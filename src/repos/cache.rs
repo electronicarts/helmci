@@ -4,9 +4,9 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use super::hash::Sha256Hash;
-use async_std::fs::File;
-use async_std::io::SeekExt;
-use async_std::io::WriteExt;
+use tokio::fs::File;
+use tokio::io::AsyncSeekExt;
+use tokio::io::AsyncWriteExt;
 use tap::Pipe;
 use thiserror::Error;
 
