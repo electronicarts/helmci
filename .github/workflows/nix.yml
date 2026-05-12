@@ -1,0 +1,37 @@
+name: Test
+
+on:
+  - push
+  - pull_request
+
+env:
+  NIX_REMOTE: daemon
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+    - uses: wimpysworld/nothing-but-nix@687c797a730352432950c707ab493fcc951818d7 # v10
+    - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+      with:
+        determinate:  true
+    - name: Restore and cache Nix store
+      uses: nix-community/cache-nix-action@7df957e333c1e5da7721f60227dbba6d06080569 # v7.0.2
+      with:
+        # restore and save a cache using this key
+        primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock') }}
+        # if there's no cache hit, restore a cache by this prefix
+        restore-prefixes-first-match: nix-${{ runner.os }}-
+        # collect garbage until Nix store size (in bytes) is at most this number
+        # before trying to save a new cache
+        gc-max-store-size-linux: 1073741824
+        # do purge caches
+        purge: true
+        # purge all versions of the cache
+        purge-prefixes: cache-${{ runner.os }}-
+        # created more than this number of seconds ago relative to the start of the `Post Restore` phase
+        purge-created: 0
+        # except the version with the `primary-key`, if it exists
+        purge-primary-key: never
+    - run: nix flake check --impure
