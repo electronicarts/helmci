@@ -15,6 +15,9 @@ jobs:
     name: Release Please
     runs-on: ubuntu-latest
     if: github.repository == 'electronicarts/helmci'
+    permissions:
+      contents: write
+      pull-requests: write
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
@@ -82,6 +85,8 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     continue-on-error: true
+    permissions:
+      contents: read
     env:
       RUSTFLAGS: ${{ matrix.rustflags || '' }}
     steps:
@@ -151,6 +156,8 @@ jobs:
     name: Add Build Artifacts to Release
     needs: [release_please, github_build]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Setup | Artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
