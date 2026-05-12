@@ -87,6 +87,7 @@
         workspaceShell = pkgs.mkShell {
           buildInputs = [
             pkgs-unstable.rust-analyzer
+            pkgs-unstable.osv-scanner
             rustSrcPlatform
             helm
             awscli
