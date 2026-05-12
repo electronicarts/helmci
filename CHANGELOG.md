@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.2](https://github.com/electronicarts/helmci/compare/v2.1.1...v2.1.2) (2026-05-12)
+
+
+### Bug Fixes
+
+* replace unmaintained packages with mantained versions ([c660844](https://github.com/electronicarts/helmci/commit/c660844e74aee69a01a2efb2059644622dbea549))
+
 ## [2.1.1](https://github.com/electronicarts/helmci/compare/v2.1.0...v2.1.1) (2026-05-01)
 
 
