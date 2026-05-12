@@ -2,9 +2,9 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use async_compression::tokio::write::GzipEncoder;
-use tokio::io::AsyncWriteExt;
 use serde::Deserialize;
 use thiserror::Error;
+use tokio::io::AsyncWriteExt;
 
 use crate::repos::cache::Key;
 use crate::repos::meta::RepoSpecific;
