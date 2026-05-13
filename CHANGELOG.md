@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.3](https://github.com/electronicarts/helmci/compare/v2.1.2...v2.1.3) (2026-05-13)
+
+
+### Bug Fixes
+
+* workaround missing type values in slack messages ([fc88ab5](https://github.com/electronicarts/helmci/commit/fc88ab54eb3e4ceeaa6085d155f52679ee16706a))
+
 ## [2.1.2](https://github.com/electronicarts/helmci/compare/v2.1.1...v2.1.2) (2026-05-12)
 
 
