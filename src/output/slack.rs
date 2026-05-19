@@ -183,26 +183,24 @@ fn rich_text_block(elements: Vec<SlackRichTextElement>) -> SlackBlock {
 }
 
 fn versions_to_block(state: &State) -> SlackBlock {
-    // SlackRichTextList.elements is Vec<SlackRichTextSection>, but SlackRichTextSection
-    // serializes without a "type" field, which the Slack API requires for list elements.
-    // Work around this library bug by using individual Section elements with bullet prefixes.
-    let elements: Vec<SlackRichTextElement> = state
+    let elements: Vec<SlackRichTextListElement> = state
         .jobs
         .iter()
         .filter_map(|installation| {
             if let Some((our_version, upstream_version)) = state.versions.get(&installation.id) {
-                rich_text_section(vec![
-                    rich_text("• "),
-                    rich_text(&format!(
-                        "{}/{}/",
-                        installation.cluster_name, installation.namespace
-                    )),
-                    rich_text_bold(&installation.name),
-                    rich_text(": "),
-                    rich_text(our_version),
-                    rich_text(" → "),
-                    rich_text(upstream_version),
-                ])
+                SlackRichTextListElement::Section(SlackRichTextSection {
+                    elements: vec![
+                        rich_text(&format!(
+                            "{}/{}/",
+                            installation.cluster_name, installation.namespace
+                        )),
+                        rich_text_bold(&installation.name),
+                        rich_text(": "),
+                        rich_text(our_version),
+                        rich_text(" → "),
+                        rich_text(upstream_version),
+                    ],
+                })
                 .pipe(Some)
             } else {
                 None
@@ -210,7 +208,13 @@ fn versions_to_block(state: &State) -> SlackBlock {
         })
         .collect();
 
-    rich_text_block(elements)
+    rich_text_block(vec![SlackRichTextElement::List(SlackRichTextList {
+        style: SlackRichTextListStyle::Bullet,
+        elements,
+        indent: None,
+        offset: None,
+        border: None,
+    })])
 }
 
 pub fn config_env_var(name: &str) -> Result<String, Error> {
@@ -499,14 +503,10 @@ fn get_installation_blocks(state: &State) -> Vec<SlackBlock> {
             }
 
             {
-                // SlackRichTextList.elements is Vec<SlackRichTextSection>, but
-                // SlackRichTextSection serializes without "type", which Slack API requires.
-                // Work around by using individual Section elements with bullet prefixes.
-                let sections: Vec<SlackRichTextElement> = status_vec
+                let sections: Vec<SlackRichTextListElement> = status_vec
                     .iter()
                     .map(|x| {
                         let mut elements = vec![
-                            rich_text("• "),
                             rich_text(&format!("{}/{}/", x.cluster, x.namespace)),
                             rich_text_bold(x.release),
                         ];
@@ -515,11 +515,17 @@ fn get_installation_blocks(state: &State) -> Vec<SlackBlock> {
                             elements.push(rich_text(&format!(" ({})", x.duration)));
                         }
 
-                        rich_text_section(elements)
+                        SlackRichTextListElement::Section(SlackRichTextSection { elements })
                     })
                     .collect();
 
-                let block = rich_text_block(sections);
+                let block = rich_text_block(vec![SlackRichTextElement::List(SlackRichTextList {
+                    style: SlackRichTextListStyle::Bullet,
+                    elements: sections,
+                    indent: None,
+                    offset: None,
+                    border: None,
+                })]);
                 blocks.push(block);
             }
         }
