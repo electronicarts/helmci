@@ -32,7 +32,7 @@ rustls = "0.23.40"
 thiserror = "2.0.18"
 sha256 = "1.6.0"
 docker_credential = "1.4.0"
-oci-client = { version  = "0.16.1", default-features = false, features = [ "rustls-tls"] }
+oci-client = { version  = "0.17.0", default-features = false, features = [ "rustls-tls"] }
 astral-tokio-tar = "0.6.2"
 async-compression = { version = "0.4.42", features = ["tokio", "gzip"] }
 async-channel = "2.5.0"
