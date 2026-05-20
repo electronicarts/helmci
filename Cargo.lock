@@ -264,9 +264,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-ecr"
-version = "1.115.1"
+version = "1.116.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e30c797e7df731ba0c9d051b2f82a95526fd1fb3905185908d1b77d6e0a1386"
+checksum = "e71ed1102d777c2717a38ac3ccff53647b521a549ad18388fd192ab19ac9d72b"
 dependencies = [
  "aws-credential-types",
  "aws-runtime",
