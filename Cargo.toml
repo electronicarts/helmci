@@ -36,7 +36,7 @@ oci-client = { version  = "0.17.0", default-features = false, features = [ "rust
 astral-tokio-tar = "0.6.2"
 async-compression = { version = "0.4.42", features = ["tokio", "gzip"] }
 async-channel = "2.5.0"
-aws-config = "1.8.16"
+aws-config = "1.8.17"
 aws-sdk-ecr = "1.115.1"
 aws-sdk-ecrpublic = "1.101.0"
 # aws-credential-types = "1.2.8"
