@@ -5,8 +5,6 @@
 //! This defines a list of commands that take a message to the output server and an installation to act on.
 use anyhow::Result;
 use aws_config::{BehaviorVersion, Region};
-use aws_sdk_ecr::operation::describe_images::DescribeImagesOutput;
-use aws_sdk_ecrpublic::types::ImageTagDetail;
 use semver::Version;
 use serde::Deserialize;
 use std::{
@@ -490,14 +488,14 @@ async fn outdated_helm_chart(
 
 /// Public AWS token
 #[derive(Deserialize, Debug)]
-struct AwsToken {
+struct AwsPublicToken {
     token: String,
 }
 
-/// Parsed Public OCI tags
+/// Parsed OCI tags list response
 #[allow(dead_code)]
 #[derive(Deserialize, Debug)]
-struct AwsTags {
+struct OciTags {
     name: Option<String>,
     #[serde(default)]
     tags: Vec<String>,
@@ -564,48 +562,41 @@ impl ParsedOci {
                     .await;
                 let client = aws_sdk_ecr::Client::new(&config);
 
-                // Create a DescribeImages request.
-                let request = client
-                    .describe_images()
-                    .repository_name(path)
-                    .registry_id(account);
+                let resp = client
+                    .get_authorization_token()
+                    .send()
+                    .await?;
 
-                let mut paginator = request.into_paginator().send();
+                let auth_data = resp
+                    .authorization_data()
+                    .first()
+                    .ok_or_else(|| anyhow::anyhow!("No authorization data returned from ECR"))?;
 
-                let mut maybe_max_version: Option<Version> = None;
-                while let Some(page) = paginator.next().await {
-                    let page = page?;
-                    let version = get_max_version_in_page(&page)?;
-                    let Some(version) = version else {
-                        continue;
-                    };
-                    maybe_max_version = max_version(maybe_max_version, version);
-                }
+                let token = auth_data
+                    .authorization_token()
+                    .ok_or_else(|| anyhow::anyhow!("No authorization token in ECR response"))?;
 
-                Ok(maybe_max_version)
-            }
-            ParsedOci::Public { path } => {
-                // Can't get this working.
-                // let config = aws_config::defaults(BehaviorVersion::v2025_08_07())
-                //     .region("us-east-1")
-                //     .load()
-                //     .await;
-                // let client = aws_sdk_ecrpublic::Client::new(&config);
+                let registry_host = format!("{account}.dkr.ecr.{region}.amazonaws.com");
 
-                // let tags = client
-                //     .describe_image_tags()
-                //     .repository_name(path)
-                //     .send()
-                //     .await?;
-
-                // let tags_details = tags.image_tag_details();
-
-                let token: AwsToken = reqwest::get("https://public.ecr.aws/token/")
+                let tags: OciTags = reqwest::Client::new()
+                    .get(format!("https://{registry_host}/v2/{path}/tags/list"))
+                    .header("Authorization", format!("Basic {token}"))
+                    .send()
                     .await?
                     .json()
                     .await?;
 
-                let tags: AwsTags = reqwest::Client::new()
+                get_latest_version_from_tags(path, &tags.tags, tx)
+                    .await
+                    .pipe(Ok)
+            }
+            ParsedOci::Public { path } => {
+                let token: AwsPublicToken = reqwest::get("https://public.ecr.aws/token/")
+                    .await?
+                    .json()
+                    .await?;
+
+                let tags: OciTags = reqwest::Client::new()
                     .get(format!("https://public.ecr.aws/v2/{path}/tags/list"))
                     .header("Authorization", format!("Bearer {}", token.token))
                     .send()
@@ -613,46 +604,12 @@ impl ParsedOci {
                     .json()
                     .await?;
 
-                let tags_details: Vec<_> = tags
-                    .tags
-                    .into_iter()
-                    .map(|tag| ImageTagDetail::builder().image_tag(tag).build())
-                    .collect();
-
-                get_latest_version_from_tags(path, &tags_details, tx)
+                get_latest_version_from_tags(path, &tags.tags, tx)
                     .await
                     .pipe(Ok)
             }
         }
     }
-}
-
-fn max_version(maybe_max_version: Option<Version>, version: Version) -> Option<Version> {
-    match maybe_max_version {
-        None => version,
-        Some(max) if version > max => version,
-        Some(max) => max,
-    }
-    .pipe(Some)
-}
-
-fn get_max_version_in_page(page: &DescribeImagesOutput) -> Result<Option<Version>> {
-    let details = page.image_details();
-    let mut maybe_max_version: Option<Version> = None;
-    for image in details {
-        // println!("xxxx {:?} {:?}", image.repository_name, image.image_tags);
-        // let repository_name = image.repository_name.as_deref().unwrap_or("unknown");
-        if let Some(tags) = &image.image_tags {
-            for tag in tags {
-                if is_ignorable_tag(tag) {
-                    continue;
-                }
-                let version = parse_version(tag)?;
-                maybe_max_version = max_version(maybe_max_version, version);
-            }
-        }
-    }
-    Ok(maybe_max_version)
 }
 
 /// Generate the outdated report for an OCI chart reference stored on ECR.
@@ -694,18 +651,14 @@ fn parse_version(tag: &str) -> Result<Version> {
     Version::parse(tag)?.pipe(Ok)
 }
 
-/// Get the latest version for the given `AwsTags`.
+/// Get the latest version for the given tags.
 async fn get_latest_version_from_tags(
     path: &str,
-    tags: &[ImageTagDetail],
+    tags: &[String],
     output: &MultiOutput,
 ) -> Option<Version> {
     let mut versions = vec![];
-    for tag in tags {
-        let Some(tag_str) = &tag.image_tag else {
-            continue;
-        };
-
+    for tag_str in tags {
         if is_ignorable_tag(tag_str) {
             continue;
         }
