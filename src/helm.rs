@@ -562,10 +562,7 @@ impl ParsedOci {
                     .await;
                 let client = aws_sdk_ecr::Client::new(&config);
 
-                let resp = client
-                    .get_authorization_token()
-                    .send()
-                    .await?;
+                let resp = client.get_authorization_token().send().await?;
 
                 let auth_data = resp
                     .authorization_data()
