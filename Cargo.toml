@@ -37,7 +37,7 @@ astral-tokio-tar = "0.6.2"
 async-compression = { version = "0.4.42", features = ["tokio", "gzip"] }
 async-channel = "2.5.0"
 aws-config = "1.8.18"
-aws-sdk-ecr = "1.117.0"
+aws-sdk-ecr = "1.119.0"
 # aws-credential-types = "1.2.8"
 aws-credential-types = { version = "1.2.14", features = ["hardcoded-credentials"] } # Enable the feature here
 base64 = "0.22.1"
