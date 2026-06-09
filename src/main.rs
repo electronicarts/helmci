@@ -105,13 +105,21 @@ async fn run_job(
         } => {
             helm::lint(installation, tx).await?;
             let diff_result = helm::diff(installation, tx).await?;
-            match (diff_result, skip_upgrade_on_no_changes) {
-                (DiffResult::Changes, _) | (_, false) => {
-                    helm::upgrade(installation, tx, true).await?;
-                    helm::upgrade(installation, tx, false).await?;
-                    Ok(JobSuccess::Completed)
+            let skip = match (diff_result, skip_upgrade_on_no_changes) {
+                (DiffResult::Changes, _) | (_, false) => false,
+                (DiffResult::NoChanges, true) => {
+                    // Helm records a new revision even for failed upgrades, so
+                    // a subsequent diff against that revision shows no changes.
+                    // We must still re-run the upgrade to let helm reconcile.
+                    helm::release_status(installation, tx).await? != helm::ReleaseStatus::Failed
                 }
-                (DiffResult::NoChanges, true) => Ok(JobSuccess::Skipped),
+            };
+            if skip {
+                Ok(JobSuccess::Skipped)
+            } else {
+                helm::upgrade(installation, tx, true).await?;
+                helm::upgrade(installation, tx, false).await?;
+                Ok(JobSuccess::Completed)
             }
         }
         Request::Diff { .. } => {

@@ -79,6 +79,7 @@ pub enum Command {
     Template,
     UpgradeDry,
     Upgrade,
+    Status,
 }
 
 impl Display for Command {
@@ -89,6 +90,7 @@ impl Display for Command {
             Command::Template => "template",
             Command::UpgradeDry => "upgrade(dry)",
             Command::Upgrade => "upgrade(real)",
+            Command::Status => "status",
         };
         f.write_str(str)
     }
@@ -370,6 +372,78 @@ pub async fn diff(downloaded: &DownloadedInstallation, tx: &MultiOutput) -> Resu
 }
 
 /// Run the helm upgrade command.
+/// The status of a deployed helm release.
+#[derive(Debug, Eq, PartialEq)]
+pub enum ReleaseStatus {
+    /// The release was successfully deployed.
+    Deployed,
+    /// The last upgrade/install failed. The release must be re-attempted even
+    /// if `helm diff` reports no manifest changes, because helm recorded the
+    /// failed revision's manifests as the current state.
+    Failed,
+    /// Any other status (pending, superseded, not installed, etc.).
+    Other,
+}
+
+/// Query the current status of a helm release.
+///
+/// Returns `ReleaseStatus::Other` for releases that have never been installed
+/// or when the status cannot be determined, so callers can treat unknown
+/// states conservatively.
+pub async fn release_status(
+    downloaded: &DownloadedInstallation,
+    tx: &MultiOutput,
+) -> Result<ReleaseStatus> {
+    let installation = &downloaded.installation;
+
+    let args = vec![
+        "status".into(),
+        installation.name.clone().into(),
+        "--namespace".into(),
+        installation.namespace.clone().into(),
+        "--kube-context".into(),
+        installation.context.clone().into(),
+        "--output".into(),
+        "json".into(),
+    ];
+
+    // Exit code 1 means the release does not exist yet; treat as non-error.
+    let command_line = CommandLine::new(helm_path(), args).with_allowed_exit_codes(vec![0, 1]);
+    let result = command_line.run().await;
+    let i_result = HelmResult::from_result(installation, result, Command::Status);
+
+    let status = match &i_result.result {
+        Ok(CommandSuccess {
+            exit_code: 0,
+            stdout,
+            ..
+        }) => {
+            #[derive(Deserialize)]
+            struct Info {
+                status: String,
+            }
+            #[derive(Deserialize)]
+            struct StatusOutput {
+                info: Info,
+            }
+            match serde_json::from_str::<StatusOutput>(stdout) {
+                Ok(out) => match out.info.status.as_str() {
+                    "deployed" => ReleaseStatus::Deployed,
+                    "failed" => ReleaseStatus::Failed,
+                    _ => ReleaseStatus::Other,
+                },
+                Err(_) => ReleaseStatus::Other,
+            }
+        }
+        _ => ReleaseStatus::Other,
+    };
+
+    tx.send(Message::InstallationResult(Arc::new(i_result)))
+        .await;
+
+    Ok(status)
+}
+
 pub async fn upgrade(
     downloaded: &DownloadedInstallation,
     tx: &MultiOutput,
