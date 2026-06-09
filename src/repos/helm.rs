@@ -183,7 +183,9 @@ impl Repo {
         let base_url = self.base_url.as_ref().ok_or(Error::ChartNotFound)?;
         let entry = self.internal_get_by_sha256(&meta.name, &meta.sha256_hash);
         if let Some(entry) = entry {
-            Ok(entry.download_chart(cache, base_url, Some(meta.size)).await?)
+            Ok(entry
+                .download_chart(cache, base_url, Some(meta.size))
+                .await?)
         } else {
             Err(Error::ChartNotFound)
         }
@@ -290,7 +292,10 @@ generated: 2025-01-01T00:00:00Z
         assert_eq!(repo.entries.len(), 1);
         let entries = repo.entries.get("cert-manager").unwrap();
         assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0].urls[0], "charts/cert-manager-v1.21.0-alpha.1.tgz");
+        assert_eq!(
+            entries[0].urls[0],
+            "charts/cert-manager-v1.21.0-alpha.1.tgz"
+        );
         assert_eq!(
             entries[1].urls[0],
             "https://charts.jetstack.io/charts/cert-manager-v1.20.2.tgz"
