@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.6](https://github.com/electronicarts/helmci/compare/v2.1.5...v2.1.6) (2026-06-09)
+
+
+### Bug Fixes
+
+* ensure we don't skip failed jobs ([a7a312d](https://github.com/electronicarts/helmci/commit/a7a312d73795e3c978e0f96f4edd97eacd02f33f))
+
 ## [2.1.5](https://github.com/electronicarts/helmci/compare/v2.1.4...v2.1.5) (2026-06-09)
 
 
