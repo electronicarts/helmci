@@ -196,7 +196,15 @@ impl Repo {
         let mut versions = Vec::with_capacity(list.len());
 
         for entry in list {
-            let version = versions::parse_version(&entry.version)?;
+            // Skip entries whose version strings can't be parsed (e.g. old non-semver
+            // formats in some repos) and pre-release versions (alpha/beta/rc) so that
+            // "newest" always resolves to the latest stable release.
+            let Ok(version) = versions::parse_version(&entry.version) else {
+                continue;
+            };
+            if !version.pre.is_empty() {
+                continue;
+            }
             versions.push(version);
         }
 
@@ -300,6 +308,40 @@ generated: 2025-01-01T00:00:00Z
             entries[1].urls[0],
             "https://charts.jetstack.io/charts/cert-manager-v1.20.2.tgz"
         );
+    }
+
+    #[test]
+    fn test_get_newest_version_skips_prerelease_and_unparseable() {
+        let index = r"
+apiVersion: v1
+entries:
+  cert-manager:
+    - created: 2025-01-01T00:00:00Z
+      description: cert-manager alpha
+      digest: aaff4545f79d8b2913a10cb400ebb6fa9c77fe813287afbacf1a0b897cdffffff
+      name: cert-manager
+      urls:
+      - charts/cert-manager-v1.21.0-alpha.1.tgz
+      version: v1.21.0-alpha.1
+    - created: 2024-12-01T00:00:00Z
+      description: cert-manager stable
+      digest: 99c76e403d752c84ead610644d4b1c2f2b453a74b921f422b9dcb8a7c8b559cd
+      name: cert-manager
+      urls:
+      - https://charts.jetstack.io/charts/cert-manager-v1.20.2.tgz
+      version: v1.20.2
+    - created: 2020-01-01T00:00:00Z
+      description: cert-manager old non-semver
+      digest: bbff4545f79d8b2913a10cb400ebb6fa9c77fe813287afbacf1a0b897cdeeeeee
+      name: cert-manager
+      urls:
+      - https://charts.jetstack.io/charts/cert-manager-v0.8-alpha.tgz
+      version: v0.8-alpha
+generated: 2025-01-01T00:00:00Z
+";
+        let repo = serde_yaml_ng::from_str::<Repo>(index).unwrap();
+        let newest = repo.get_newest_version("cert-manager").unwrap();
+        assert_eq!(newest.to_string(), "1.20.2");
     }
 
     #[tokio::test]
