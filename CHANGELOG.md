@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.5](https://github.com/electronicarts/helmci/compare/v2.1.4...v2.1.5) (2026-06-09)
+
+
+### Bug Fixes
+
+* don't fail on non-semver compliant versions ([964bfcd](https://github.com/electronicarts/helmci/commit/964bfcd63d3d28d0401335cc8d1e5d9e39d801f3))
+
 ## [2.1.4](https://github.com/electronicarts/helmci/compare/v2.1.3...v2.1.4) (2026-06-09)
 
 
