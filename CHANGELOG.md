@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.1.4](https://github.com/electronicarts/helmci/compare/v2.1.3...v2.1.4) (2026-06-09)
+
+
+### Bug Fixes
+
+* remove SlackRichTextListElement hack ([e9fdc9c](https://github.com/electronicarts/helmci/commit/e9fdc9c6c2f3f339243673237d87b90883d27870))
+* replace outdated to use OCI API instead of AWS API for private OCI ([b115156](https://github.com/electronicarts/helmci/commit/b115156e158e4ff4d048ba281e559eb6e5f46797))
+* **repos/helm:** Support relative references in helm index files ([19477cd](https://github.com/electronicarts/helmci/commit/19477cdc559d3ae29f2ed5e1ce950cc8cfaf76fb))
+
 ## [2.1.3](https://github.com/electronicarts/helmci/compare/v2.1.2...v2.1.3) (2026-05-13)
 
 
