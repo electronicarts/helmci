@@ -20,6 +20,8 @@ pub enum Error {
     Parse(#[from] serde_yaml_ng::Error),
     #[error("Failed to append url: {0}")]
     UrlJoin(#[from] AppendUrlError),
+    #[error("Failed to resolve chart URL: {0}")]
+    UrlResolve(#[from] url::ParseError),
     #[error("File error: {0}")]
     File(PathBuf, std::io::Error),
     #[error("Cache error: {0}")]
@@ -46,8 +48,8 @@ struct Entry {
     home: Option<String>,
     name: String,
     #[serde(default)]
-    sources: Vec<Url>,
-    urls: Vec<Url>,
+    sources: Vec<String>,
+    urls: Vec<String>,
     version: String,
 }
 
@@ -55,6 +57,7 @@ impl Entry {
     async fn download_chart(
         &self,
         cache: &Cache,
+        base_url: &Url,
         expected_size: Option<u64>,
     ) -> Result<Chart, Error> {
         let Some(sha256_hash) = &self.digest else {
@@ -70,7 +73,8 @@ impl Entry {
             self.file_to_chart(file, sha256_hash, expected_size)?;
         }
 
-        let url = self.urls.first().ok_or(Error::ChartNotFound)?;
+        let url_str = self.urls.first().ok_or(Error::ChartNotFound)?;
+        let url = base_url.join(url_str)?;
         let mut file = cache.create_cache_entry(".tgz", expected_size).await?;
 
         {
@@ -127,14 +131,23 @@ pub struct Repo {
     api_version: String,
     entries: HashMap<String, Vec<Entry>>,
     generated: chrono::DateTime<chrono::FixedOffset>,
+    #[serde(skip)]
+    base_url: Option<Url>,
 }
 
 impl Repo {
     pub async fn download_index(url: &Url) -> Result<Self, Error> {
         let url = append_url(url, "index.yaml")?;
-        let response = reqwest::get(url).await?.error_for_status()?;
+        let response = reqwest::get(url.clone()).await?.error_for_status()?;
         let text = response.text().await?;
-        Ok(serde_yaml_ng::from_str::<Repo>(&text)?)
+        let mut repo = serde_yaml_ng::from_str::<Repo>(&text)?;
+        // Strip "index.yaml" to get the base URL for resolving relative chart URLs.
+        let mut base = url.clone();
+        base.path_segments_mut()
+            .map_err(|()| AppendUrlError::UrlJoin)?
+            .pop();
+        repo.base_url = Some(base);
+        Ok(repo)
     }
 
     fn internal_get_by_version(&self, name: &str, version: &str) -> Option<&Entry> {
@@ -157,18 +170,20 @@ impl Repo {
         version: &str,
         cache: &Cache,
     ) -> Result<Chart, Error> {
+        let base_url = self.base_url.as_ref().ok_or(Error::ChartNotFound)?;
         let entry = self.internal_get_by_version(name, version);
         if let Some(entry) = entry {
-            Ok(entry.download_chart(cache, None).await?)
+            Ok(entry.download_chart(cache, base_url, None).await?)
         } else {
             Err(Error::ChartNotFound)
         }
     }
 
     pub async fn get_by_meta(&self, meta: &Meta, cache: &Cache) -> Result<Chart, Error> {
+        let base_url = self.base_url.as_ref().ok_or(Error::ChartNotFound)?;
         let entry = self.internal_get_by_sha256(&meta.name, &meta.sha256_hash);
         if let Some(entry) = entry {
-            Ok(entry.download_chart(cache, Some(meta.size)).await?)
+            Ok(entry.download_chart(cache, base_url, Some(meta.size)).await?)
         } else {
             Err(Error::ChartNotFound)
         }
@@ -244,6 +259,41 @@ generated: 2016-10-06T16:23:20.499029981-06:00
         assert_eq!(
             text.generated,
             DateTime::parse_from_rfc3339("2016-10-06T16:23:20.499029981-06:00").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_deserialize_index_relative_urls() {
+        // Indexes with relative chart URLs (e.g. jetstack/cert-manager alpha releases)
+        // must parse successfully; resolution happens later against the base URL.
+        let index = r"
+apiVersion: v1
+entries:
+  cert-manager:
+    - created: 2025-01-01T00:00:00Z
+      description: A Helm chart for cert-manager
+      digest: aaff4545f79d8b2913a10cb400ebb6fa9c77fe813287afbacf1a0b897cdffffff
+      name: cert-manager
+      urls:
+      - charts/cert-manager-v1.21.0-alpha.1.tgz
+      version: v1.21.0-alpha.1
+    - created: 2024-12-01T00:00:00Z
+      description: A Helm chart for cert-manager
+      digest: 99c76e403d752c84ead610644d4b1c2f2b453a74b921f422b9dcb8a7c8b559cd
+      name: cert-manager
+      urls:
+      - https://charts.jetstack.io/charts/cert-manager-v1.20.2.tgz
+      version: v1.20.2
+generated: 2025-01-01T00:00:00Z
+";
+        let repo = serde_yaml_ng::from_str::<Repo>(index).unwrap();
+        assert_eq!(repo.entries.len(), 1);
+        let entries = repo.entries.get("cert-manager").unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].urls[0], "charts/cert-manager-v1.21.0-alpha.1.tgz");
+        assert_eq!(
+            entries[1].urls[0],
+            "https://charts.jetstack.io/charts/cert-manager-v1.20.2.tgz"
         );
     }
 
