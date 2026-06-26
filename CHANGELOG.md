@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.7](https://github.com/electronicarts/helmci/compare/v2.1.6...v2.1.7) (2026-06-26)
+
+
+### Bug Fixes
+
+* try to fix/diagnose OCI error ([a0f6626](https://github.com/electronicarts/helmci/commit/a0f66261aea63b296a5a84bd3e9d6b418d8fc94a))
+
 ## [2.1.6](https://github.com/electronicarts/helmci/compare/v2.1.5...v2.1.6) (2026-06-09)
 
 
