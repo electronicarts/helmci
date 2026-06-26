@@ -18,13 +18,13 @@ use super::{
 pub enum Error {
     #[error("File error: {0}")]
     File(PathBuf, std::io::Error),
-    #[error("OCI IO error: {0}")]
+    #[error("OCI IO error: {0}: {1}")]
     OciIo(Box<Reference>, std::io::Error),
     #[error("Cache error: {0}")]
     Cache(#[from] cache::Error),
     #[error("Invalid OCI URL")]
     InvalidOciUrl(Url),
-    #[error("OCI error: {0}")]
+    #[error("OCI error: {0}: {1}")]
     OciDistribution(Box<Reference>, oci_client::errors::OciDistributionError),
     #[error("Not an OCI image")]
     NotAnOciImage,
@@ -56,7 +56,7 @@ impl Repo {
             .host_str()
             .ok_or(Error::InvalidOciUrl(url.clone()))?
             .to_string();
-        let path = String::from(url.path());
+        let path = url.path().trim_start_matches('/').to_string();
 
         Ok(Repo { host, path })
     }
