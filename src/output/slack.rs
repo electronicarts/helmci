@@ -419,9 +419,8 @@ impl SlackState {
             Err(err) => &err.cmd,
         };
 
-        let text = SlackBlockPlainTextOnly::from(cmd.to_string());
-        let block = SlackSectionBlock::new().with_text(text.into());
-        blocks.push(block.into());
+        let block = preformat_block(&cmd.to_string());
+        blocks.push(block);
 
         let text = SlackBlockPlainTextOnly::from(hr.result_line());
         let block = SlackSectionBlock::new().with_text(text.into());
