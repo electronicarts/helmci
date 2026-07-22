@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.8](https://github.com/electronicarts/helmci/compare/v2.1.7...v2.1.8) (2026-07-22)
+
+
+### Bug Fixes
+
+* render helm command as preformatted block in Slack output ([7c9d1a6](https://github.com/electronicarts/helmci/commit/7c9d1a6cb548bd2302f6fd247c5bb71cf9ede83a))
+* update cmov from 0.5.3 to 0.5.4 to fix GHSA-3rjw-m598-pq24 ([50ca1a9](https://github.com/electronicarts/helmci/commit/50ca1a9565263b3ebd6ce22c3f072cc7eb2d6ed1))
+
 ## [2.1.7](https://github.com/electronicarts/helmci/compare/v2.1.6...v2.1.7) (2026-06-26)
 
 
