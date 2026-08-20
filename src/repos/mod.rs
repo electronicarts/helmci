@@ -34,6 +34,7 @@ pub enum Error {
     NameMismatch(String, String),
 }
 
+#[allow(clippy::result_large_err)]
 pub async fn download_by_reference(
     repos: &Repos,
     cache: &cache::Cache,
@@ -78,6 +79,7 @@ pub async fn download_by_reference(
     }
 }
 
+#[allow(clippy::result_large_err)]
 pub async fn download_by_meta(
     repos: &Repos,
     cache: &cache::Cache,
@@ -159,6 +161,7 @@ impl Repos {
         }
     }
 
+    #[allow(clippy::result_large_err)]
     pub async fn download(&mut self, chart: &ChartReference) -> Result<(), Error> {
         match chart {
             ChartReference::Helm { repo_url, .. } => {

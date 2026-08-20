@@ -184,6 +184,7 @@ fn get_stdin_out(output: &Result<Output, io::Error>) -> Result<(String, String),
 }
 
 impl CommandLine {
+    #[allow(clippy::result_large_err)]
     pub async fn run(&self) -> CommandResult {
         let start = Instant::now();
 
