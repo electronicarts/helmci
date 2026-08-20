@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.9](https://github.com/electronicarts/helmci/compare/v2.1.8...v2.1.9) (2026-08-20)
+
+
+### Bug Fixes
+
+* update event-listener to 5.4.2 to fix RUSTSEC-2026-0221 ([e15dd38](https://github.com/electronicarts/helmci/commit/e15dd38ebdb7e06e0deec1912e591ecc4f4c3c81))
+
 ## [2.1.8](https://github.com/electronicarts/helmci/compare/v2.1.7...v2.1.8) (2026-07-22)
 
 
