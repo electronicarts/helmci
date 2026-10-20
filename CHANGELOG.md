@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.1.9](https://github.com/electronicarts/helmci/compare/v2.1.8...v2.1.9) (2026-10-20)
+
+
+### Bug Fixes
+
+* **ci:** ignore unfixed unsafe-libyaml advisory ([e57cf50](https://github.com/electronicarts/helmci/commit/e57cf502796d380ec2d9403ee6930ca49ef87db5))
+* **deps:** update patched rustls packages ([8b66136](https://github.com/electronicarts/helmci/commit/8b6613664dea78e6f243a9d8249cbb35e47ea936))
+* **deps:** update quinn-proto for OSV advisories ([c8a523f](https://github.com/electronicarts/helmci/commit/c8a523f2795c86dd9ab931320b5bfa694eb78bfd))
+* **deps:** update rustls past security advisories ([add435d](https://github.com/electronicarts/helmci/commit/add435dd8138ea6fd73d83b019b721bdb95c27ee))
+* update event-listener to 5.4.2 to fix RUSTSEC-2026-0221 ([e15dd38](https://github.com/electronicarts/helmci/commit/e15dd38ebdb7e06e0deec1912e591ecc4f4c3c81))
+
 ## [2.1.8](https://github.com/electronicarts/helmci/compare/v2.1.7...v2.1.8) (2026-07-22)
 
 
