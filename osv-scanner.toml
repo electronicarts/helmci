@@ -1,3 +1,7 @@
+[[IgnoredVulns]]
+id = "GHSA-qwgh-2vcv-g2f7"
+reason = "No patched 0.10.x release exists; block-buffer 0.10.4 is required by digest 0.10.7 through aws-config and sha256. Reassess when upstream releases a compatible fix."
+
 [[PackageOverrides]]
 name = "rustls-webpki"
 version = "0.101.7"
