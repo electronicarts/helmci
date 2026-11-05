@@ -1,7 +1,3 @@
-[[IgnoredVulns]]
-id = "GHSA-qwgh-2vcv-g2f7"
-reason = "No patched 0.10.x release exists; block-buffer 0.10.4 is required by digest 0.10.7 through aws-config and sha256. Reassess when upstream releases a compatible fix."
-
 [[PackageOverrides]]
 name = "rustls-webpki"
 version = "0.101.7"
@@ -22,3 +18,10 @@ version = "0.2.11"
 ecosystem = "crates.io"
 vulnerability.ignore = true
 reason = "RUSTSEC-2024-0449: unmaintained advisory, no patched version exists. Transitive dependency of serde_yaml_ng."
+
+[[PackageOverrides]]
+name = "astral-tokio-tar"
+version = "0.7.0"
+ecosystem = "crates.io"
+vulnerability.ignore = true
+reason = "RUSTSEC-2026-0440: upstream ended maintenance; all versions are deprecated and no patched version exists. Used to create local chart archives; evaluate a tar-codec migration separately."
