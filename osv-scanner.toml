@@ -21,7 +21,7 @@ reason = "RUSTSEC-2024-0449: unmaintained advisory, no patched version exists. T
 
 [[PackageOverrides]]
 name = "astral-tokio-tar"
-version = "0.7.0"
+version = "0.7.1"
 ecosystem = "crates.io"
 vulnerability.ignore = true
 reason = "RUSTSEC-2026-0440: upstream ended maintenance; all versions are deprecated and no patched version exists. Used to create local chart archives; evaluate a tar-codec migration separately."
