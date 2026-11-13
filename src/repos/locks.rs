@@ -24,14 +24,14 @@ impl Lock {
         Self { meta }
     }
 
-    pub fn _load(lock_file: &std::path::Path) -> Result<Self, std::io::Error> {
+    pub fn load_io(lock_file: &std::path::Path) -> Result<Self, std::io::Error> {
         let file: String = std::fs::read_to_string(lock_file)?;
         let locks: Lock = serde_json::from_str(&file)?;
         Ok(locks)
     }
 
     pub fn load(lock_file: &std::path::Path) -> Result<Self, Error> {
-        Self::_load(lock_file).map_err(|err| Error::Io {
+        Self::load_io(lock_file).map_err(|err| Error::Io {
             filename: lock_file.to_path_buf(),
             error: err,
         })
