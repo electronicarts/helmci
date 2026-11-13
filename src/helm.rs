@@ -630,7 +630,7 @@ impl ParsedOci {
                 region,
                 path,
             } => {
-                let config = aws_config::defaults(BehaviorVersion::v2026_01_12())
+                let config = aws_config::defaults(BehaviorVersion::v2026_11_10())
                     .region(Region::new(region.clone()))
                     .load()
                     .await;
