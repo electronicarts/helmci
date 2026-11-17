@@ -1,18 +1,4 @@
 [[PackageOverrides]]
-name = "rustls-webpki"
-version = "0.101.7"
-ecosystem = "crates.io"
-vulnerability.ignore = true
-reason = "Transitive dependency pinned by AWS SDK (aws-smithy-http-client -> hyper-rustls -> rustls 0.21). Not fixable from this crate."
-
-[[PackageOverrides]]
-name = "proc-macro-error2"
-version = "2.0.1"
-ecosystem = "crates.io"
-vulnerability.ignore = true
-reason = "RUSTSEC-2026-0173: unmaintained advisory, no patched version exists. Used only at compile time (proc-macro) by getset (via oci-spec -> oci-client) and tabled_derive (via tabled). No runtime security impact."
-
-[[PackageOverrides]]
 name = "unsafe-libyaml"
 version = "0.2.11"
 ecosystem = "crates.io"
@@ -25,3 +11,10 @@ version = "0.7.1"
 ecosystem = "crates.io"
 vulnerability.ignore = true
 reason = "RUSTSEC-2026-0440: upstream ended maintenance; all versions are deprecated and no patched version exists. Used to create local chart archives; evaluate a tar-codec migration separately."
+
+[[PackageOverrides]]
+name = "chrono"
+version = "0.4.45"
+ecosystem = "crates.io"
+vulnerability.ignore = true
+reason = "RUSTSEC-2026-0543: unmaintained advisory, no patched versions exist. Chrono is used directly for date handling and UTC timestamps; evaluate migration to a maintained date/time crate separately."
